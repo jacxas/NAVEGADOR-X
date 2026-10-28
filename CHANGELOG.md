@@ -2,6 +2,24 @@
 
 All notable changes to this project are documented in this file.
 
+## [v0.3.2-alpha] - 2026-10-28
+
+### Fixed
+- Typecheck is green again: the IndexedDB promise in `AIChat` is typed as `Promise<void>`
+  (it was the single TS2794 error behind a red `npm run lint`).
+
+### Security
+- The model credential is stored with Electron `safeStorage` (DPAPI on Windows,
+  Keychain on macOS, libsecret on Linux) and migrated from the old plaintext
+  `settings.json` on first launch. If the platform offers no keystore, nothing is written.
+- `will-attach-webview` now **blocks** any source outside `http(s)`, `app://`,
+  `navegador://` and `runtime://`; previously it only logged a warning.
+- PWA shortcuts quote the URL and reject whitespace and quotes, closing an argument
+  injection path into the Chromium command line.
+
+### Added
+- CI workflow: `tsc --noEmit`, renderer build and Electron shell build on every push and PR.
+
 ## [v0.3.0-alpha] - 2026-10-10
 
 ### Added
