@@ -24,6 +24,7 @@ import {
   session,
   protocol,
   dialog,
+  safeStorage,
 } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs';
@@ -75,7 +76,10 @@ function userDataFile(name: string): string {
 }
 
 interface ShellSettings {
+  /** Legado: versiones anteriores guardaban la clave en claro. Solo se lee para migrar. */
   geminiApiKey?: string;
+  /** Clave cifrada con el almacén del sistema (base64). */
+  geminiSecretEnc?: string;
   geminiModel?: string;
 }
 
@@ -98,12 +102,59 @@ function writeSettings(next: ShellSettings): void {
   }
 }
 
+/**
+ * Cifra un secreto con el almacén del sistema (DPAPI en Windows, Keychain en
+ * macOS, libsecret en Linux). Devuelve `null` si el sistema no lo ofrece.
+ */
+function encryptSecret(value: string): string | null {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) return null;
+    return safeStorage.encryptString(value).toString('base64');
+  } catch (error) {
+    console.warn('[NavegadorX] No se pudo cifrar el secreto:', error);
+    return null;
+  }
+}
+
+function decryptSecret(payload: string): string {
+  try {
+    return safeStorage.decryptString(Buffer.from(payload, 'base64'));
+  } catch (error) {
+    console.warn('[NavegadorX] No se pudo descifrar el secreto:', error);
+    return '';
+  }
+}
+
+/**
+ * Migración única: las versiones anteriores guardaban la clave del modelo en
+ * claro dentro de `settings.json`. Al arrancar se cifra y se borra el original.
+ * Si el sistema no ofrece cifrado, el fichero se deja como está y se avisa.
+ */
+function migratePlaintextSecrets(): void {
+  const settings = readSettings();
+  if (!settings.geminiApiKey) return;
+  const encrypted = encryptSecret(settings.geminiApiKey);
+  if (!encrypted) {
+    console.warn('[NavegadorX] Sin almacén cifrado: la clave heredada no se puede migrar.');
+    return;
+  }
+  settings.geminiSecretEnc = encrypted;
+  delete settings.geminiApiKey;
+  writeSettings(settings);
+  console.log('[NavegadorX] Clave del modelo migrada al almacén cifrado del sistema.');
+}
+
 /** Clave efectiva: variable de entorno primero, luego ajustes guardados. */
 function geminiApiKey(): string {
   const fromEnv = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (fromEnv && fromEnv.trim()) return fromEnv.trim();
-  const stored = readSettings().geminiApiKey;
-  return stored && stored.trim() ? stored.trim() : '';
+  const stored = readSettings();
+  if (stored.geminiSecretEnc) {
+    const decrypted = decryptSecret(stored.geminiSecretEnc).trim();
+    if (decrypted) return decrypted;
+  }
+  // Compatibilidad con el formato anterior, solo mientras se migra.
+  return stored.geminiApiKey && stored.geminiApiKey.trim() ? stored.geminiApiKey.trim() : '';
 }
 
 function geminiModel(): string {
@@ -126,6 +177,24 @@ async function openExternalSafely(url: string): Promise<boolean> {
   }
   await shell.openExternal(url);
   return true;
+}
+
+/** Esquemas internos que un `<webview>` puede cargar además de la web. */
+const INTERNAL_WEBVIEW_SCHEMES = ['navegador:', 'runtime:'];
+
+/**
+ * Lista blanca para `<webview>`: web real, el bundle de la app y las páginas
+ * internas del producto. Cualquier otro esquema (`file:`, `data:`, `javascript:`)
+ * se rechaza antes de que el elemento llegue a adjuntarse.
+ */
+function isAllowedWebviewUrl(url: string): boolean {
+  if (url.startsWith(APP_ORIGIN)) return true;
+  if (isSafeExternalUrl(url)) return true;
+  try {
+    return INTERNAL_WEBVIEW_SCHEMES.includes(new URL(url).protocol);
+  } catch {
+    return false;
+  }
 }
 
 function broadcast(channel: string, payload: unknown): void {
@@ -545,7 +614,7 @@ function createMainWindow(): BrowserWindow {
   });
 
   // Endurecimiento de los <webview> incrustados.
-  win.webContents.on('will-attach-webview', (_event, webPreferences, params) => {
+  win.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     delete (webPreferences as any).preload;
     webPreferences.nodeIntegration = false;
     webPreferences.contextIsolation = true;
@@ -554,8 +623,9 @@ function createMainWindow(): BrowserWindow {
     webPreferences.allowRunningInsecureContent = false;
 
     const src = params.src || '';
-    if (src && !isSafeExternalUrl(src) && !src.startsWith(APP_ORIGIN)) {
-      console.warn('[NavegadorX] webview con origen no permitido:', src);
+    if (src && !isAllowedWebviewUrl(src)) {
+      console.warn('[NavegadorX] webview con origen no permitido (bloqueado):', src);
+      event.preventDefault();
     }
   });
 
@@ -912,13 +982,29 @@ function registerIpcHandlers(): void {
   ipcMain.handle('ai:set-key', (_event, credencial: string, model?: string) => {
     const settings = readSettings();
     if (typeof credencial === 'string') {
-      settings.geminiApiKey = credencial.trim();
+      const value = credencial.trim();
+      if (value) {
+        const encrypted = encryptSecret(value);
+        if (!encrypted) {
+          return {
+            ok: false,
+            reason: 'Este sistema no ofrece almacenamiento cifrado; la clave no se ha guardado.',
+            hasKey: Boolean(geminiApiKey()),
+            model: geminiModel(),
+          };
+        }
+        settings.geminiSecretEnc = encrypted;
+        delete settings.geminiApiKey;
+      } else {
+        delete settings.geminiSecretEnc;
+        delete settings.geminiApiKey;
+      }
     }
     if (typeof model === 'string' && model.trim()) {
       settings.geminiModel = model.trim();
     }
     writeSettings(settings);
-    return { hasKey: Boolean(geminiApiKey()), model: geminiModel() };
+    return { ok: true, hasKey: Boolean(geminiApiKey()), model: geminiModel() };
   });
   ipcMain.handle(
     'ai:query',
@@ -1134,11 +1220,16 @@ function registerIpcHandlers(): void {
       const name = typeof datos?.name === 'string' ? datos.name.trim().slice(0, 60) : '';
       if (!/^https:\/\//i.test(url)) return { ok: false, reason: 'Solo se pueden instalar aplicaciones por HTTPS' };
       if (!name) return { ok: false, reason: 'La aplicación no declara nombre en su manifest' };
+      // Los argumentos del acceso directo se escriben con comillas y sin espacios:
+      // una URL con espacios o comillas permitiría inyectar opciones de Chromium.
+      if (/[\s"'\\<>|]/.test(url)) {
+        return { ok: false, reason: 'La dirección de la aplicación no es válida' };
+      }
 
       const safeName = name.replace(/[\\/:*?"<>|]/g, '').trim() || 'Aplicacion';
       const opciones = {
         target: process.execPath,
-        args: `--app=${url}`,
+        args: `--app="${url}"`,
         cwd: path.dirname(process.execPath),
         description: `${name} (instalada desde Navegador X)`,
         // MVP: el icono del acceso directo es el del propio navegador. Convertir
@@ -1289,6 +1380,7 @@ if (!gotTheLock) {
 
   app.whenReady().then(() => {
     app.setAppUserModelId('app.navegadorx.desktop');
+    migratePlaintextSecrets();
 
     if (!IS_DEV) {
       registerAppProtocol();

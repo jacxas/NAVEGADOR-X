@@ -108,7 +108,7 @@ async function loadMessagesIDB(): Promise<Message[]> {
 async function saveMessagesIDB(msgs: Message[]): Promise<void> {
   try {
     const db = await openChatDB();
-    await new Promise((resolve, reject) => {
+    await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(CHAT_STORE, 'readwrite');
       tx.objectStore(CHAT_STORE).put({ id: CHAT_KEY, msgs: msgs.slice(-CHAT_MAX_MESSAGES), updatedAt: Date.now() });
       tx.oncomplete = () => resolve();

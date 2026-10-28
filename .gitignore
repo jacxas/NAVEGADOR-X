@@ -1,4 +1,16 @@
-﻿node_modules/
+node_modules/
 dist/
 electron-dist/
 release/
+
+# Secretos y configuración local
+.env
+.env.*
+!.env.example
+
+# Artefactos y ruido de desarrollo
+*.log
+*.tsbuildinfo
+*.tmp
+.DS_Store
+Thumbs.db
