@@ -6,7 +6,7 @@ import { cn } from '@/src/lib/utils';
 import { MinerConsentModal } from './MinerConsentModal';
 import { useMiner } from '@/src/hooks/useMiner';
 import { db, auth, handleFirestoreError, OperationType } from '@/src/lib/firebase';
-import { doc, onSnapshot, updateDoc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot, getDoc } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 
 const data = [
@@ -64,24 +64,8 @@ export function MinerDashboard() {
     return () => unsub();
   }, [user]);
 
-  // Periodic persistence to Firestore
-  useEffect(() => {
-    if (!isMining || !user) return;
-
-    const persistInterval = setInterval(async () => {
-      const userRef = doc(db, 'users', user.uid);
-      try {
-        await updateDoc(userRef, {
-          earnings: earningsRef.current,
-          lastActive: new Date().toISOString()
-        });
-      } catch (error) {
-        console.error("Failed to persist earnings", error);
-      }
-    }, 15000); // Save every 15s to save quota
-
-    return () => clearInterval(persistInterval);
-  }, [isMining, user]);
+  // El contador de X-COIN es una simulación local: no se persiste en Firestore.
+  // Escribirlo en `users.earnings` convertía una demo en un saldo real.
 
   useEffect(() => {
     // Battery & Idle simulation

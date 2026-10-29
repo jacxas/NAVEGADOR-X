@@ -2,6 +2,20 @@
 
 All notable changes to this project are documented in this file.
 
+## [v0.3.3-alpha] - 2026-10-28
+
+### Security
+- Firestore rules no longer allow a user to change their own `earnings`; only an admin can.
+- `logs` writes are validated: known fields, message ≤ 500 characters, type whitelist.
+
+### Changed
+- The mining panel keeps its X-COIN counter in memory; it no longer writes a balance to Firestore.
+- Removed the GitHub Pages workflow: Pages was never enabled, so it failed on every push. The web
+  edition runs locally with `npm run dev`.
+
+### Added
+- Release workflow: pushing a `v*` tag builds the Windows installers from that commit and publishes them.
+
 ## [v0.3.2-alpha] - 2026-10-28
 
 ### Fixed

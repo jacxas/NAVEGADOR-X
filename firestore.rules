@@ -63,6 +63,13 @@ service cloud.firestore {
              data.type in ['free', 'premium'];
     }
 
+    function isValidLog(data) {
+      return data.keys().hasOnly(['message', 'type', 'timestamp']) &&
+             data.get('message', '') is string &&
+             data.get('message', '').size() <= 500 &&
+             data.get('type', 'info') in ['info', 'security', 'warning'];
+    }
+
     // ---------------------------------------------------------
     // ROUTES
     // ---------------------------------------------------------
@@ -90,7 +97,7 @@ service cloud.firestore {
         // Action: User self-update (protected fields)
         (isUser(uid) && 
          !incoming().diff(existing()).affectedKeys().hasAny(['status', 'role', 'email']) &&
-         incoming().diff(existing()).affectedKeys().hasOnly(['preferences', 'lastActive', 'earnings', 'displayName'])) ||
+         incoming().diff(existing()).affectedKeys().hasOnly(['preferences', 'lastActive', 'displayName'])) ||
         // Action: Admin override
         isAdmin()
       );
@@ -102,7 +109,7 @@ service cloud.firestore {
     }
 
     match /logs/{logId} {
-      allow create: if isSignedIn() && isValidId(logId);
+      allow create: if isSignedIn() && isValidId(logId) && isValidLog(incoming());
       allow read: if isAdmin();
     }
   }

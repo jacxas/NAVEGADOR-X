@@ -1,6 +1,6 @@
 # Navegador X — Edición de Escritorio
 
-**v0.3.2-alpha** · Windows x64 · Electron 44 / Chromium 152 · Licencia MIT
+**v0.3.3-alpha** · Windows x64 · Electron 44 / Chromium 152 · Licencia MIT
 
 Navegador de escritorio con motor real (Chromium embebido), bloqueo de publicidad a nivel de red, proxy configurable, descargas a disco y **capacidad de instalar PWAs** como aplicaciones con acceso directo y ventana propia.
 
@@ -10,7 +10,10 @@ Navegador de escritorio con motor real (Chromium embebido), bloqueo de publicida
 
 **[Descargar Navegador X 0.3.1-alpha](https://github.com/jacxas/NAVEGADOR-X/releases/latest)** — instalador (`NavegadorX-Setup-0.3.1-alpha.exe`) y versión portable incluidos como assets del release.
 
-Ramas: `main` = proyecto completo (web + kernel + edición Electron + scripts QA) · `hosted-preview` = variante web alojada.
+Ramas: `main` = proyecto completo (web + kernel + edición Electron + scripts QA) · `hosted-preview` = variante web para servir en local.
+
+> La edición web se sirve en tu máquina con `npm run dev` (http://127.0.0.1:3000).
+> No hay sitio publicado: GitHub Pages no está habilitado en este repositorio.
 
 ---
 

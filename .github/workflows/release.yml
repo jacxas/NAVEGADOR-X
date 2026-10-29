@@ -1,0 +1,48 @@
+name: Release
+
+# Se dispara al empujar una etiqueta v*: compila el instalador desde ese commit
+# y lo publica como release. Así el binario siempre sale del código etiquetado.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build renderer and Electron shell
+        run: npm run build:desktop
+
+      - name: Package Windows installers
+        run: npx electron-builder --win --publish never
+
+      - name: List artifacts
+        run: Get-ChildItem release -File | Select-Object Name, Length
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*Setup*.exe
+            release/*Portable*.exe
+            release/*.blockmap
+          prerelease: true
+          generate_release_notes: true
