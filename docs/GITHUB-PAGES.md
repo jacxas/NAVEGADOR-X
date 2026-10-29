@@ -70,7 +70,11 @@ verificado.
    incluido el paso `Verify the build works under a subpath`.
 3. **HTML publicado leído**: sirve la aplicación real (cabecera «Saltar al contenido»,
    pestañas, dashboard), no el `index.html` de desarrollo.
-4. Ahí se detectó un fallo de contenido: la interfaz anunciaba **v0.3.0-alpha** yendo por
+4. **Comprobado en vivo tras el despliegue** (`https://jacxas.github.io/NAVEGADOR-X/`):
+   la página sirve la aplicación y anuncia **v0.3.5-alpha**. Ojo con la **caché del CDN
+   de Pages** (~10 min): la primera lectura sin `?cachebust=` devolvía la versión
+   anterior. Al verificar un despliegue, añade un parámetro a la URL.
+5. Ahí se detectó un fallo de contenido: la interfaz anunciaba **v0.3.0-alpha** yendo por
    la 0.3.4. Corregido: la versión se inyecta desde `package.json` (`src/lib/version.ts`)
    y una prueba comprueba que no vuelva a escribirse a mano.
 
