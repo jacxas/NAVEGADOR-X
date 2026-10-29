@@ -41,6 +41,7 @@ vi.mock('@/src/lib/aiClient', () => ({
 }));
 
 import App from '../App';
+import { APP_VERSION_LABEL } from '../lib/version';
 
 describe('App (humo)', () => {
   it('monta la interfaz y expone la barra de direcciones accesible', async () => {
@@ -77,5 +78,14 @@ describe('App (humo)', () => {
 
     expect(screen.getByRole('button', { name: 'VPN X' })).toHaveAttribute('aria-current', 'page');
     expect(address).toHaveValue('navegador://vpn');
+  });
+
+  it('muestra la versión real de package.json, no un texto escrito a mano', async () => {
+    render(<App />);
+
+    // La web publicada llegó a anunciar v0.3.0-alpha yendo por la 0.3.4.
+    const heading = await screen.findByRole('heading', { name: new RegExp(`Navegador\\s*X`) });
+    expect(heading).toHaveTextContent(APP_VERSION_LABEL);
+    expect(screen.queryByText(/v0\.3\.0-alpha/)).not.toBeInTheDocument();
   });
 });

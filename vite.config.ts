@@ -1,13 +1,21 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import fs from 'node:fs';
 import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
+
+// La versión que muestra la interfaz sale de package.json, no de textos escritos
+// a mano que se quedan atrás en cada release.
+const {version: appVersion} = JSON.parse(fs.readFileSync(path.resolve(__dirname, 'package.json'), 'utf8'));
 
 export default defineConfig(({mode}) => {
   return {
     // Base relativa: el mismo build sirve para GitHub Pages (/NAVEGADOR-X/),
     // para el servidor Express (/) y para el shell de escritorio (app://bundle/).
     base: './',
+    define: {
+      __APP_VERSION__: JSON.stringify(appVersion),
+    },
     plugins: [react(), tailwindcss()],
     build: {
       rollupOptions: {
