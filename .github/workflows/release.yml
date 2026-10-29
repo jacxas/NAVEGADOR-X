@@ -1,7 +1,17 @@
 name: Release
 
-# Se dispara al empujar una etiqueta v*: compila el instalador desde ese commit
-# y lo publica como release. Así el binario siempre sale del código etiquetado.
+# Se dispara al empujar una etiqueta v*: verifica, compila el instalador desde ese
+# commit y lo publica. Así el binario siempre sale del código etiquetado.
+#
+# Antes de etiquetar:
+#   1. La versión de package.json debe coincidir con la etiqueta (este workflow lo
+#      comprueba y falla si no).
+#   2. git tag v0.3.4-alpha && git push origin v0.3.4-alpha
+#
+# Firma de código (opcional): si defines los secretos CSC_LINK y CSC_KEY_PASSWORD,
+# electron-builder firma los ejecutables y el workflow comprueba la firma. Sin esos
+# secretos el release se publica sin firmar y se avisa en las notas. Ver
+# docs/FIRMA-DE-CODIGO.md.
 on:
   push:
     tags:
@@ -12,8 +22,10 @@ permissions:
   contents: write
 
 jobs:
-  build:
-    runs-on: windows-latest
+  # Puerta de calidad: no se compila ni se publica nada si el código no pasa el
+  # typecheck o las pruebas. Linux es más rápido para esto.
+  verify:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,23 +38,135 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+
+      - name: Check tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        run: node scripts/check-version.mjs "${GITHUB_REF_NAME}"
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+  build:
+    needs: verify
+    runs-on: windows-latest
+    env:
+      # Ruta corta de compilación. NSIS genera includes con rutas absolutas y
+      # Windows corta en 260 caracteres: compilar desde una carpeta profunda hacía
+      # fallar el empaquetado con «include … 263 caracteres».
+      BUILD_DIR: C:\nx
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Copy sources to a short path
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path $env:BUILD_DIR | Out-Null
+          # .git no hace falta para compilar y pesa: se excluye del traslado.
+          robocopy $env:GITHUB_WORKSPACE $env:BUILD_DIR /E /XD .git node_modules /NFL /NDL /NJH /NJS /NP
+          if ($LASTEXITCODE -ge 8) { exit $LASTEXITCODE }
+          exit 0
+
+      - name: Install dependencies
+        working-directory: C:\nx
+        run: npm ci
 
       - name: Build renderer and Electron shell
+        working-directory: C:\nx
         run: npm run build:desktop
 
       - name: Package Windows installers
+        working-directory: C:\nx
+        # CSC_LINK / CSC_KEY_PASSWORD vacíos = build sin firmar (comportamiento actual).
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: npx electron-builder --win --publish never
 
+      - name: Check signature
+        shell: pwsh
+        working-directory: C:\nx
+        env:
+          HAS_CERT: ${{ secrets.CSC_LINK != '' }}
+        run: |
+          $installer = Get-ChildItem release -Filter '*Setup*.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'No se generó el instalador NSIS.' }
+
+          $signature = Get-AuthenticodeSignature $installer.FullName
+          Write-Host "$($installer.Name): $($signature.Status)"
+
+          if ($env:HAS_CERT -eq 'true' -and $signature.Status -ne 'Valid') {
+            throw "El certificado está configurado pero la firma no es válida: $($signature.Status)"
+          }
+          if ($env:HAS_CERT -ne 'true') {
+            Write-Warning 'Build SIN FIRMAR: no hay CSC_LINK configurado. Windows mostrará «editor desconocido».'
+          }
+
+      - name: Generate SHA256SUMS
+        shell: pwsh
+        working-directory: C:\nx
+        run: |
+          $lines = Get-ChildItem release -Filter '*.exe' | Sort-Object Name | ForEach-Object {
+            "{0}  {1}" -f (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower(), $_.Name
+          }
+          if (-not $lines) { throw 'No hay ejecutables que resumir.' }
+          $lines | Set-Content release\SHA256SUMS.txt -Encoding ascii
+          $lines | ForEach-Object { Write-Host $_ }
+
       - name: List artifacts
+        shell: pwsh
+        working-directory: C:\nx
         run: Get-ChildItem release -File | Select-Object Name, Length
 
+      - name: Decide release channel
+        if: startsWith(github.ref, 'refs/tags/')
+        id: channel
+        shell: pwsh
+        env:
+          HAS_CERT: ${{ secrets.CSC_LINK != '' }}
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $prerelease = if ($version -match '-') { 'true' } else { 'false' }
+          "prerelease=$prerelease" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+          $signed = if ($env:HAS_CERT -eq 'true') {
+            'Build **firmada**: Windows muestra el editor real.'
+          } else {
+            'Build **sin firma de código**: Windows puede mostrar «editor desconocido». Consulta `docs/FIRMA-DE-CODIGO.md`.'
+          }
+          "signing_note=$signed" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release/*Setup*.exe
-            release/*Portable*.exe
-            release/*.blockmap
-          prerelease: true
+            C:\nx\release\*Setup*.exe
+            C:\nx\release\*Portable*.exe
+            C:\nx\release\*.blockmap
+            C:\nx\release\SHA256SUMS.txt
+          prerelease: ${{ steps.channel.outputs.prerelease }}
           generate_release_notes: true
+          append_body: true
+          body: |
+            ## Verificación de la descarga
+
+            Cada ejecutable va acompañado de `SHA256SUMS.txt`. Para comprobarlo:
+
+            ```
+            sha256sum -c SHA256SUMS.txt        # Linux / macOS
+            Get-FileHash .\NavegadorX-Setup-*.exe -Algorithm SHA256   # Windows
+            ```
+
+            ${{ steps.channel.outputs.signing_note }}

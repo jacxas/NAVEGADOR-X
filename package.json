@@ -28,7 +28,9 @@
     "package:win": "npm run build:desktop && electron-builder --win",
     "package:dir": "npm run build:desktop && electron-builder --win --dir",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "verify": "npm run lint && npm test",
+    "release:check": "node scripts/check-version.mjs"
   },
   "dependencies": {
     "@firebase/eslint-plugin-security-rules": "^0.0.2",

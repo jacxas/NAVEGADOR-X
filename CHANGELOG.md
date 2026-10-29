@@ -29,6 +29,19 @@ All notable changes to this project are documented in this file.
 - «Historial» y «Ajustes» de la barra lateral se muestran como no disponibles: antes eran
   botones que no hacían nada al pulsarlos.
 
+### Added (release)
+- `release.yml` ahora verifica antes de compilar (typecheck + pruebas) y comprueba que la
+  etiqueta coincida con `package.json`; si no, falla en vez de publicar un binario con la
+  versión equivocada.
+- Compilación en ruta corta (`C:\nx`): NSIS generaba includes de más de 260 caracteres y
+  el empaquetado fallaba en carpetas profundas.
+- `SHA256SUMS.txt` adjunto a cada release, y las versiones con sufijo (`-alpha`, `-beta`,
+  `-rc.1`) se marcan como pre-release de forma automática.
+- Firma de código preparada: con los secretos `CSC_LINK`/`CSC_KEY_PASSWORD` el workflow
+  firma y **falla si la firma no es válida**; sin ellos publica sin firmar y lo advierte.
+- `docs/RELEASE.md` (procedimiento y verificación) y `docs/FIRMA-DE-CODIGO.md` (opciones,
+  costes y activación).
+
 ### Security (servidor web)
 - El servidor escucha por defecto en **127.0.0.1**, no en `0.0.0.0`. Exponerlo a la red
   local pasa a ser una decisión explícita (`NAVEGADOR_HOST=0.0.0.0`).
