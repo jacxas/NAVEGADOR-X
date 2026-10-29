@@ -22,8 +22,7 @@ import {
 import { APP_VERSION, APP_VERSION_LABEL } from '@/src/lib/version';
 import { motion, AnimatePresence } from 'motion/react';
 import { QuickStats } from './QuickStats';
-import { ConnectionStatus } from './ConnectionStatus';
-import { ThreatProtection } from './ThreatProtection';
+import { QuickActions } from './QuickActions';
 import { AIActivityFeed } from './AIActivityFeed';
 import { kernel } from '../kernel/BrowserKernel';
 import { downloadServicePlugin } from '../plugins/DownloadServicePlugin';
@@ -124,8 +123,8 @@ Los instaladores se generan con «npm run package:win».
                 <span className="w-2 h-2 rounded-full bg-brand-cyan animate-ping" />
                 {desktop ? `Edición Escritorio ${APP_VERSION_LABEL}` : `Edición Web ${APP_VERSION_LABEL}`}
               </span>
-              <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold uppercase tracking-widest">
-                Runtime OS v1.0 Sincronizado
+              <span className="px-2.5 py-0.5 rounded-full bg-white/5 border border-white/10 text-gray-400 text-[10px] font-mono font-bold uppercase tracking-widest">
+                {activePluginsCount} módulos · {activeTasksCount} tareas
               </span>
             </div>
 
@@ -144,8 +143,8 @@ Los instaladores se generan con «npm run package:win».
               <span className="px-2 py-1 rounded bg-white/5 border border-white/10 flex items-center gap-1">
                 <Terminal size={12} className="text-brand-cyan" /> Kernel Scheduler
               </span>
-              <span className="px-2 py-1 rounded bg-white/5 border border-white/10 flex items-center gap-1">
-                <ShieldCheck size={12} className="text-emerald-400" /> Anti-Fingerprint
+              <span className="px-2 py-1 rounded bg-white/5 border border-white/10 flex items-center gap-1" title="La CSP y los permisos de sitio se aplican en el servidor; las métricas de seguimiento no se falsean.">
+                <ShieldCheck size={12} className="text-emerald-400" /> CSP + permisos
               </span>
               <span className="px-2 py-1 rounded bg-white/5 border border-white/10 flex items-center gap-1">
                 <Download size={12} className="text-amber-400" /> Download Turbo
@@ -431,10 +430,10 @@ Los instaladores se generan con «npm run package:win».
         </div>
       </div>
 
-      {/* Right Column: 1/3 width */}
+      {/* Right Column: accesos y estado real (la red y las protecciones tienen
+          su propia pestaña, aquí no se duplican). */}
       <div className="col-span-12 lg:col-span-4 flex flex-col gap-6">
-        <ConnectionStatus />
-        <ThreatProtection />
+        <QuickActions onNavigate={onNavigate} onOpenDownloads={onOpenDownloads} />
       </div>
     </div>
   );

@@ -89,7 +89,7 @@ export function TabResourceMonitor({
   };
 
   return (
-    <div className={cn("relative font-mono text-[10px] select-none", className)}>
+    <div className={cn("relative font-mono text-[10px]", className)}>
       {/* Compact Header Pill Bar */}
       <button
         type="button"

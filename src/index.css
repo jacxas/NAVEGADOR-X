@@ -41,6 +41,27 @@
     @apply bg-space-black text-text-main font-sans selection:bg-brand-magenta/30 selection:text-brand-cyan antialiased transition-colors duration-300;
   }
 
+  /* El texto de la interfaz se puede seleccionar y copiar.
+     La barra de título nativa y las barras de arrastre sí se excluyen, porque
+     seleccionar mientras se arrastra una ventana estorba. */
+  p,
+  li,
+  dd,
+  dt,
+  td,
+  th,
+  h1,
+  h2,
+  h3,
+  h4,
+  pre,
+  code,
+  kbd,
+  textarea {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
   html.theme-light-aura, body.theme-light-aura {
     --color-space-black: #f0f4f9;
     --color-card-bg: #ffffff;

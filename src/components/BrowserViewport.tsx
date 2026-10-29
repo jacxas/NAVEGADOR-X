@@ -22,10 +22,12 @@ import { AlertTriangle, ArrowLeft, ArrowRight, ExternalLink, RefreshCw, ShieldAl
 import { kernel } from '@/src/kernel/BrowserKernel';
 import { isDesktopApp, openExternal, SHARED_PARTITION } from '@/src/lib/desktop';
 import type { ElectronWebviewElement } from '@/src/types/desktop';
+import { restorePage, translatePageInPlace } from '@/src/lib/pageTranslation';
 
 const BROWSER_PARTITION = 'persist:navegadorx';
 
-/** Ejecuta una llamada al webview devolviendo un valor de reserva si aún no está listo. */function safeCall<T>(operation: () => T, fallback: T): T {
+/** Ejecuta una llamada al webview devolviendo un valor de reserva si aún no está listo. */
+function safeCall<T>(operation: () => T, fallback: T): T {
   try {
     return operation();
   } catch {
@@ -326,6 +328,46 @@ export const BrowserViewport = forwardRef<BrowserViewportHandle, BrowserViewport
         case 'load':
           if (target && webviewRef.current) webviewRef.current.src = target;
           break;
+        case 'translate-page': {
+          // Traducción en la propia página: se lee el texto del webview, se traduce
+          // por trozos y se reescribe en su sitio. No abre ningún recuadro.
+          const language = (event.payload as { language?: string })?.language || 'Español';
+          const view = webviewRef.current;
+          if (!view) {
+            kernel.eventBus.publish(
+              'translation.failed',
+              { reason: 'La página aún no ha terminado de cargarse.' },
+              'BrowserViewport',
+            );
+            break;
+          }
+          kernel.eventBus.publish('translation.started', { language }, 'BrowserViewport');
+          void translatePageInPlace(view, language, {
+            onProgress: (progress) =>
+              kernel.eventBus.publish('translation.progress', { ...progress, language }, 'BrowserViewport'),
+          })
+            .then((result) =>
+              kernel.eventBus.publish('translation.done', { ...result, language }, 'BrowserViewport'),
+            )
+            .catch((error: unknown) =>
+              kernel.eventBus.publish(
+                'translation.failed',
+                { reason: error instanceof Error ? error.message : 'Error desconocido' },
+                'BrowserViewport',
+              ),
+            );
+          break;
+        }
+        case 'restore-page': {
+          const view = webviewRef.current;
+          if (!view) break;
+          void restorePage(view)
+            .then((restored) =>
+              kernel.eventBus.publish('translation.restored', { restored }, 'BrowserViewport'),
+            )
+            .catch(() => undefined);
+          break;
+        }
         default:
           break;
       }

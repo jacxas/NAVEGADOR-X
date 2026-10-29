@@ -28,6 +28,7 @@ import { cn } from '@/src/lib/utils';
 import { desktopBridge, isDesktopApp, openExternal } from '@/src/lib/desktop';
 import type { NativeAppInfo } from '@/src/types/desktop';
 import { APP_VERSION_LABEL } from '@/src/lib/version';
+import { copyText } from '@/src/lib/clipboard';
 
 const REPOSITORY_FALLBACK = 'https://github.com/cryptojacxas-ship-it/NAVEGADOR-X';
 
@@ -66,13 +67,10 @@ export function OwnershipPanel() {
     .join('\n');
 
   const copyNotice = async () => {
-    try {
-      await navigator.clipboard.writeText(notice);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2500);
-    } catch {
-      setCopied(false);
-    }
+    // Mismo camino con plan B que el resto de la aplicación.
+    const result = await copyText(notice);
+    setCopied(result.ok);
+    setTimeout(() => setCopied(false), 2500);
   };
 
   const rows: Array<{ label: string; value: string; mono?: boolean }> = [

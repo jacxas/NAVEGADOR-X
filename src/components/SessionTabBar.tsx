@@ -98,7 +98,7 @@ export function SessionTabBar({
   };
 
   return (
-    <div className="flex items-center gap-1 bg-[#0a0b0d] px-3 pt-1 border-b border-border-subtle overflow-x-auto scrollbar-none select-none">
+    <div className="flex items-center gap-1 bg-[#0a0b0d] px-3 pt-1 border-b border-border-subtle overflow-x-auto scrollbar-none">
       <div
         className="flex items-center gap-1 flex-1 overflow-x-auto"
         role="tablist"

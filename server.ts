@@ -178,21 +178,19 @@ async function startServer() {
       const ai = getGeminiClient();
 
       if (!ai) {
-        return res.json({
-          success: true,
-          translatedContent: `### Traducción Instantánea de Navegador X [${targetLanguage}]
-
-**Resumen de la página (${url || 'Pestaña activa'})**:
-Esta página web ha sido traducida al **${targetLanguage}**. Se trata de un sitio web con información técnica y noticias de tecnología, finanzas descentralizadas y servicios de red.
-
-**Contenido traducido principal**:
-- **Bienvenido a Navegador X**: La plataforma de navegación descentralizada con soporte multicadena y túneles cuánticos de privacidad.
-- **Servicios de Red**: Acceso a nodos VPN de alta velocidad en Suiza, Islandia y Singapur con cifrado AES-256.
-- **Modulo de Minería**: Optimización energética automática y rendimiento de red en tiempo real.
-- **Seguridad**: Todas las conexiones están protegidas contra fugas de DNS y malware activo.`,
+        // Antes, sin clave, este endpoint devolvía una «traducción» inventada sobre
+        // túneles cuánticos y nodos VPN que no tenían nada que ver con la página.
+        // Es preferible decir la verdad: no hay modelo que traducir.
+        return res.status(503).json({
+          success: false,
+          offline: true,
+          provider: 'Motor local (sin clave)',
           targetLanguage,
           url,
-          provider: "Fallback Local Engine"
+          translatedContent: '',
+          error:
+            'La traducción necesita un modelo de IA. Configura GEMINI_API_KEY en el servidor ' +
+            '(o una clave en Ajustes de IA de la Edición de Escritorio) para activarla.',
         });
       }
 
