@@ -1,9 +1,15 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
+/* Tipografías servidas desde el propio paquete: nada de peticiones a Google.
+   La CSP de la aplicación (`style-src 'self'`, `font-src 'self'`) bloqueaba el
+   @import externo, así que la interfaz llevaba tiempo cayendo a las fuentes del
+   sistema sin avisar. */
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/jetbrains-mono";
+
 @theme {
-  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+  --font-sans: 'Inter Variable', 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 
   --color-brand-magenta: #ff3cac;
   --color-brand-cyan: #00d2ff;

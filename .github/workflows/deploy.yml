@@ -1,0 +1,111 @@
+name: Deploy web edition (GitHub Pages)
+
+# Publica la edición web (SPA) en https://jacxas.github.io/NAVEGADOR-X/.
+#
+# Requisito, una sola vez y a mano: Settings → Pages → Build and deployment →
+# Source: GitHub Actions. El token de Actions no puede habilitar Pages por sí
+# mismo (la API devuelve 403 «Resource not accessible by integration»).
+#
+# Mientras Pages no esté habilitado, este workflow **no falla**: compila, avisa en
+# el resumen del job y se salta el despliegue. Así el CI deja de llenarse de
+# despliegues rojos (los cuatro que había eran de antes de retirar el workflow
+# anterior) y el día que se habilite, el siguiente push publica sin tocar nada.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      pages_enabled: ${{ steps.pages.outputs.enabled }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          # El binario de Electron no hace falta para compilar la web.
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+
+      - name: Typecheck
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Check whether Pages is enabled
+        id: pages
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 404 = el sitio nunca se creó. Cualquier otro código (200, o un 403 de
+          # permisos puntual) se trata como «sí», para no saltarse un despliegue
+          # real por un fallo transitorio de la API.
+          status=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/pages")
+
+          if [ "$status" = "404" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "### GitHub Pages no está habilitado"
+              echo
+              echo "El build web se ha generado, pero no se despliega porque el sitio no existe."
+              echo "Para publicarlo: **Settings → Pages → Build and deployment → Source: GitHub Actions**."
+              echo "Después, vuelve a ejecutar este workflow (\`workflow_dispatch\`) o haz un push a \`main\`."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=Pages no habilitado::Ve a Settings → Pages y elige «GitHub Actions» como origen. Este workflow empezará a publicar solo."
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Pages responde $status: se desplegará tras el build."
+          fi
+
+      - name: Build renderer
+        run: npm run build
+
+      - name: Verify the build works under a subpath
+        # Pages sirve en /NAVEGADOR-X/: si Vite volviera a un `base` absoluto,
+        # todos los recursos darían 404 y nadie se enteraría hasta abrir la web.
+        run: npm run check:pages
+
+      - name: Configure Pages
+        if: steps.pages.outputs.enabled == 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        if: steps.pages.outputs.enabled == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    if: needs.build.outputs.pages_enabled == 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

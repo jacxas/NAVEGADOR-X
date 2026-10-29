@@ -2,6 +2,22 @@
 
 All notable changes to this project are documented in this file.
 
+## [v0.3.5-alpha] - 2026-10-29
+
+### Added
+- `deploy.yml` para publicar la edición web en GitHub Pages. Si Pages no está habilitado,
+  el workflow compila, avisa y **no falla**; cuando se habilite, publica solo.
+- `npm run check:pages`: sirve `dist/` bajo `/NAVEGADOR-X/` y comprueba que cada script,
+  hoja de estilos y fuente responde 200. Se ejecuta en el propio workflow antes de
+  desplegar.
+- `docs/GITHUB-PAGES.md` con el estado, el paso que falta y qué funciona en esa URL.
+
+### Fixed
+- Las tipografías no se cargaban: la hoja de estilos importaba Google Fonts y la CSP
+  (`style-src 'self'`) lo bloqueaba, así que la interfaz usaba las fuentes del sistema.
+  Ahora Inter y JetBrains Mono se empaquetan con el build (`@fontsource-variable`): sin
+  peticiones a terceros y respetando la CSP.
+
 ## [v0.3.4-alpha] - 2026-10-29
 
 ### Fixed

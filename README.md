@@ -13,7 +13,9 @@ Navegador de escritorio con motor real (Chromium embebido), bloqueo de publicida
 Ramas: `main` = proyecto completo (web + kernel + edición Electron + scripts QA) · `hosted-preview` = variante web para servir en local.
 
 > La edición web se sirve en tu máquina con `npm run dev` (http://127.0.0.1:3000).
-> No hay sitio publicado: GitHub Pages no está habilitado en este repositorio.
+> Para publicarla en `https://jacxas.github.io/NAVEGADOR-X/` el workflow ya existe, pero
+> GitHub Pages tiene que habilitarlo el propietario: Settings → Pages → Source:
+> **GitHub Actions**. Ver [`docs/GITHUB-PAGES.md`](docs/GITHUB-PAGES.md).
 
 ---
 
@@ -65,6 +67,7 @@ npm run dev            # SPA en http://localhost:3000 (solo loopback)
 npm run lint           # tsc --noEmit
 npm test               # pruebas unitarias (Vitest + Testing Library)
 npm run verify         # lint + pruebas, lo mismo que exige el release
+npm run check:pages    # comprueba que dist/ funciona servido en /NAVEGADOR-X/
 npm run build          # build del renderer (Vite)
 
 npm run desktop        # compila renderer + main y abre Electron
