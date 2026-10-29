@@ -63,6 +63,7 @@ npm install
 
 npm run dev            # SPA en http://localhost:3000
 npm run lint           # tsc --noEmit
+npm test               # pruebas unitarias (Vitest + Testing Library)
 npm run build          # build del renderer (Vite)
 
 npm run desktop        # compila renderer + main y abre Electron

@@ -23,6 +23,14 @@
 }
 
 @layer base {
+  /* El documento ocupa la ventana completa: la interfaz usa `h-full` en lugar de
+     una altura en `vh`, que no descuenta la barra de título nativa. */
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
   body {
     @apply bg-space-black text-text-main font-sans selection:bg-brand-magenta/30 selection:text-brand-cyan antialiased transition-colors duration-300;
   }
@@ -75,6 +83,20 @@
   html.theme-light-aura .bg-white\/10 {
     background-color: rgba(15, 23, 42, 0.08) !important;
   }
+
+  /* Foco visible: sin esto, navegar con el teclado era a ciegas porque todos los
+     componentes quitaban el contorno por defecto. */
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--color-brand-cyan);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* El cian sobre fondo claro no llega al contraste mínimo; en Light Aura se usa
+     el violeta de la marca. */
+  html.theme-light-aura :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline-color: #6d28d9;
+  }
 }
 
 @keyframes spinSlow {
@@ -115,5 +137,18 @@
   
   .panel-header {
     @apply text-[10px] font-bold tracking-[0.2em] text-text-muted uppercase mb-4;
+  }
+}
+
+/* Respeta a quien pide menos movimiento en el sistema operativo. Las animaciones
+   de `motion` se reducen aparte con `<MotionConfig reducedMotion="user">`. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

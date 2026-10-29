@@ -178,8 +178,11 @@ export function AdminPanel() {
     }
   };
 
+  // `h-full min-h-0` en vez de `calc(100vh - 64px)`: la altura fija no tenía en
+  // cuenta la barra de pestañas ni la barra de direcciones, así que el panel se
+  // salía del contenedor y quedaba cortado por abajo.
   return (
-    <div className="flex flex-col h-[calc(100vh-64px)] bg-[#050507] overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col bg-[#050507] overflow-hidden">
       {/* Header Bar */}
       <header className="h-16 border-b border-white/5 bg-[#0a0a0c] px-8 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-6">
@@ -198,13 +201,15 @@ export function AdminPanel() {
 
           <div className="h-6 w-[1px] bg-white/5 mx-2" />
 
-          <nav className="flex items-center gap-1">
+          <nav className="flex items-center gap-1" aria-label="Secciones del panel de administración">
             {(['users', 'infrastructure', 'security', 'terminal', 'ownership'] as AdminTab[])
               .filter((tab) => isRoot || tab === 'users' || tab === 'security' || tab === 'ownership')
               .map((tab) => (
               <button
                 key={tab}
+                type="button"
                 onClick={() => setActiveTab(tab)}
+                aria-current={activeTab === tab ? 'page' : undefined}
                 className={cn(
                   "px-3 py-1.5 rounded-md text-[9px] font-bold uppercase tracking-widest transition-all border border-transparent",
                   activeTab === tab 
@@ -242,7 +247,7 @@ export function AdminPanel() {
       </header>
 
       {/* Admin Content */}
-      <main className="flex-1 overflow-y-auto p-8 custom-scrollbar">
+      <main className="min-h-0 flex-1 overflow-y-auto p-8 custom-scrollbar">
         <AnimatePresence mode="wait">
           {activeTab === 'users' && (
             <motion.div 

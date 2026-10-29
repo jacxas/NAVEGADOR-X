@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Globe, 
+  Lock,
   Shield, 
   Cpu, 
   Sparkles, 
@@ -66,66 +67,15 @@ import { SessionTabBar } from './components/SessionTabBar';
 import { TabResourceMonitor } from './components/TabResourceMonitor';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
-
-type Tab = 'dashboard' | 'home' | 'vpn' | 'blocker' | 'miner' | 'ai' | 'marketplace' | 'admin' | 'runtime' | 'favorites';
-
-/** Motor de búsqueda que se usa cuando lo escrito no es una dirección. */
-const SEARCH_ENGINE = 'https://www.google.com/search?q=';
-
-/**
- * Convierte lo que el usuario escribe en la barra en algo navegable.
- *
- *  - Una dirección con esquema (`https://…`, `navegador://…`) se respeta tal cual.
- *  - Un dominio, un host:puerto, una IP o `localhost` se abren como dirección.
- *  - **Cualquier otra cosa es una búsqueda**: «mejores restaurantes» termina en Google,
- *    en vez de intentar abrir `https://mejores restaurantes` y fallar.
- */
-function resolveUserInput(input: string): string {
-  const value = input.trim();
-  if (!value) return '';
-
-  // Ya trae esquema (http, navegador, runtime, file…): se usa tal cual.
-  if (/^[a-z][a-z0-9+.-]*:/i.test(value)) return value;
-
-  const sinEspacios = !/\s/.test(value);
-  const pareceDireccion =
-    sinEspacios &&
-    (/^[^\s/]+\.[a-z]{2,}([/:?#].*)?$/i.test(value) ||
-      /^localhost(:\d+)?([/?#].*)?$/i.test(value) ||
-      /^\d{1,3}(\.\d{1,3}){3}(:\d+)?([/?#].*)?$/.test(value));
-
-  if (pareceDireccion) return `https://${value}`;
-
-  return `${SEARCH_ENGINE}${encodeURIComponent(value)}`;
-}
-
-/**
- * Traducción de esquemas internos a pestañas.
- *
- * Las URL internas se escriben en español (`navegador://mineria`) mientras que los
- * identificadores de pestaña están en inglés (`miner`). Sin este mapa, media docena
- * de direcciones internas se quedaban sin efecto al escribirlas en la barra.
- */
-const INTERNAL_PAGE_ALIASES: Record<string, Tab> = {
-  dashboard: 'dashboard',
-  inicio: 'home',
-  home: 'home',
-  navegar: 'home',
-  vpn: 'vpn',
-  bloqueador: 'blocker',
-  blocker: 'blocker',
-  mineria: 'miner',
-  miner: 'miner',
-  ia: 'ai',
-  ai: 'ai',
-  mercado: 'marketplace',
-  marketplace: 'marketplace',
-  favoritos: 'favorites',
-  favorites: 'favorites',
-  admin: 'admin',
-  runtime: 'runtime',
-  kernel: 'runtime',
-};
+// Reglas de la barra de direcciones: fuera de este archivo para poder probarlas.
+import {
+  addressScheme,
+  describeAddressScheme,
+  resolveInternalPage,
+  resolveUserInput,
+  type Tab,
+} from './lib/navigation';
+import { useEscapeToClose } from './lib/a11y';
 
 /**
  * Traduce los errores de acceso de Firebase a algo que se pueda leer y accionar.
@@ -288,8 +238,10 @@ export default function App() {
         setRuntimeUri('runtime://kernel');
         setActiveTab('runtime');
       } else {
+        // `resolveInternalPage` entiende los alias en español; el `find` sobre las
+        // pestañas mantiene funcionando cualquier identificador directo nuevo.
         const target =
-          INTERNAL_PAGE_ALIASES[internalPage] ??
+          resolveInternalPage(targetUrl) ??
           (tabs.find((t) => t.id === internalPage)?.id as Tab | undefined);
         if (target) setActiveTab(target);
       }
@@ -861,8 +813,28 @@ export default function App() {
     applyUrlNavigation(url, true);
   };
 
+  // Esquema de la dirección actual: decide el icono y el anuncio para lectores de pantalla.
+  const addressKind = addressScheme(url);
+
+  // Escape cierra la capa superior: primero X-Ray, después el panel contextual de IA.
+  useEscapeToClose(
+    isXRayOpen || (isAiOpen && activeTab !== 'ai'),
+    () => {
+      if (isXRayOpen) setIsXRayOpen(false);
+      else setIsAiOpen(false);
+    },
+  );
+
   return (
-    <div className="flex h-screen w-full flex-col overflow-hidden bg-space-black text-text-main selection:bg-brand-magenta/30 selection:text-brand-cyan">
+    <div className="flex h-dvh w-full flex-col overflow-hidden bg-space-black text-text-main selection:bg-brand-magenta/30 selection:text-brand-cyan">
+      {/* Enlace de salto: primer elemento enfocable, invisible hasta que recibe el foco. */}
+      <a
+        href="#navx-main"
+        className="sr-only rounded-md bg-brand-cyan px-3 py-2 text-xs font-bold text-black focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-[100]"
+      >
+        Saltar al contenido
+      </a>
+
       {/* Barra de título propia: solo aparece en la Edición de Escritorio */}
       <DesktopTitleBar />
 
@@ -911,7 +883,11 @@ export default function App() {
             return (
               <button
                 key={tab.id}
+                type="button"
                 onClick={() => setActiveTab(tab.id as Tab)}
+                title={tab.label}
+                aria-label={tab.label}
+                aria-current={activeTab === tab.id ? 'page' : undefined}
                 className={cn(
                   "group relative flex w-full items-center rounded-xl px-2 py-3 transition-colors",
                   activeTab === tab.id 
@@ -940,7 +916,11 @@ export default function App() {
               Las secciones sensibles siguen limitadas al rol de administrador. */}
           {(isAdmin || isDesktopApp()) && (
             <button
+              type="button"
               onClick={() => setActiveTab('admin')}
+              title="Panel de administración"
+              aria-label="Panel de administración"
+              aria-current={activeTab === 'admin' ? 'page' : undefined}
               className={cn(
                 "group relative flex w-full items-center rounded-xl px-2 py-3 transition-colors border border-brand-magenta/10",
                 activeTab === 'admin' 
@@ -970,6 +950,8 @@ export default function App() {
               setIsPrivacyShieldOpen(!isPrivacyShieldOpen);
               if (!isPrivacyShieldOpen) setIsDownloadsOpen(false);
             }}
+            aria-label="Privacy Shield y anti-fingerprinting"
+            aria-pressed={isPrivacyShieldOpen}
             className={cn(
               "group relative flex w-full items-center rounded-xl px-2 py-3 transition-all border cursor-pointer mt-2",
               isPrivacyShieldOpen 
@@ -1003,6 +985,8 @@ export default function App() {
               setIsDownloadsOpen(!isDownloadsOpen);
               if (!isDownloadsOpen) setIsPrivacyShieldOpen(false);
             }}
+            aria-label="Gestor de descargas"
+            aria-pressed={isDownloadsOpen}
             className={cn(
               "group relative flex w-full items-center rounded-xl px-2 py-3 transition-all border border-white/5 cursor-pointer mt-1",
               isDownloadsOpen 
@@ -1049,7 +1033,10 @@ export default function App() {
                 )}
               </div>
               <button 
+                type="button"
                 onClick={() => firebaseLogout()}
+                aria-label="Cerrar sesión"
+                title="Cerrar sesión"
                 className="flex w-full items-center rounded-lg px-2 py-1.5 text-gray-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors"
               >
                 <div className="flex h-4 w-6 items-center justify-center">
@@ -1060,8 +1047,11 @@ export default function App() {
             </div>
           ) : (
             <button 
+              type="button"
               onClick={handleFastLogin}
               disabled={isFastAuthLoading}
+              aria-label="Iniciar sesión con Google"
+              title="Iniciar sesión con Google"
               className={cn(
                 "group flex w-full items-center rounded-xl px-2 py-2.5 text-brand-cyan transition-all border shadow-sm cursor-pointer",
                 isFastAuthLoading
@@ -1083,17 +1073,41 @@ export default function App() {
               )}
             </button>
           )}
-          <button className="flex w-full items-center rounded-xl px-2 py-3 text-gray-600 hover:text-white transition-colors">
+          {/* Estos dos botones no hacían nada al pulsarlos. Se marcan como no
+              disponibles en vez de aparentar que funcionan. */}
+          <button
+            type="button"
+            disabled
+            aria-disabled="true"
+            title="Historial completo: todavía no disponible"
+            className="flex w-full cursor-not-allowed items-center rounded-xl px-2 py-3 text-gray-600 opacity-60 transition-colors"
+          >
             <div className="flex h-8 w-8 items-center justify-center">
               <History size={18} />
             </div>
-            {isSidebarExpanded && <span className="ml-3 text-xs font-bold uppercase tracking-widest">Historial</span>}
+            {isSidebarExpanded && (
+              <span className="ml-3 text-left text-xs font-bold uppercase tracking-widest">
+                Historial
+                <span className="ml-2 font-mono text-[8px] normal-case tracking-normal text-gray-500">pronto</span>
+              </span>
+            )}
           </button>
-          <button className="flex w-full items-center rounded-xl px-2 py-3 text-gray-600 hover:text-white transition-colors">
+          <button
+            type="button"
+            disabled
+            aria-disabled="true"
+            title="Ajustes: todavía no disponible"
+            className="flex w-full cursor-not-allowed items-center rounded-xl px-2 py-3 text-gray-600 opacity-60 transition-colors"
+          >
             <div className="flex h-8 w-8 items-center justify-center">
               <Settings size={18} />
             </div>
-            {isSidebarExpanded && <span className="ml-3 text-xs font-bold uppercase tracking-widest">Ajustes</span>}
+            {isSidebarExpanded && (
+              <span className="ml-3 text-left text-xs font-bold uppercase tracking-widest">
+                Ajustes
+                <span className="ml-2 font-mono text-[8px] normal-case tracking-normal text-gray-500">pronto</span>
+              </span>
+            )}
           </button>
         </div>
       </aside>
@@ -1129,7 +1143,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* Main Content Area */}
-      <main className="relative flex flex-1 flex-col overflow-hidden">
+      <main id="navx-main" tabIndex={-1} className="relative flex min-h-0 flex-1 flex-col overflow-hidden outline-none">
         {/* IndexedDB Session Persistent Tab Bar */}
         <SessionTabBar
           openTabs={openTabs}
@@ -1143,11 +1157,16 @@ export default function App() {
         {/* Top bar (Address bar) */}
         <header className="flex h-10 items-center gap-4 border-b border-border-subtle bg-[#121214] px-4">
           <div className="flex items-center gap-1">
-            <div className="flex space-x-1.5 mr-3">
-              <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f56]" />
-              <div className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e]" />
-              <div className="w-2.5 h-2.5 rounded-full bg-[#27c93f]" />
-            </div>
+            {/* Los tres puntos son decorativos: en la Edición de Escritorio la ventana
+                ya tiene su propia barra de título con los controles reales, así que
+                mostrarlos aquí duplicaba los botones de ventana. */}
+            {!isDesktopApp() && (
+              <div className="flex space-x-1.5 mr-3" aria-hidden="true">
+                <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f56]" />
+                <div className="w-2.5 h-2.5 rounded-full bg-[#ffbd2e]" />
+                <div className="w-2.5 h-2.5 rounded-full bg-[#27c93f]" />
+              </div>
+            )}
 
             {/* Browser Controls: Back, Forward, Reload */}
             <div className="flex items-center gap-1 border-l border-white/10 pl-2">
@@ -1186,11 +1205,27 @@ export default function App() {
               className="group relative w-full max-w-xl mx-auto flex items-center"
             >
               <div className="flex items-center bg-[#1e1e20] px-3 py-1 rounded-md border border-[#3a3a3c] w-full focus-within:border-brand-magenta/50 transition-colors">
-                 <span className="text-[10px] text-gray-500 mr-2 font-mono">navigatorx://</span>
+                 {/* Icono del esquema real de la dirección. Antes había un prefijo
+                     fijo «navigatorx://» que se sumaba al valor y lo duplicaba. */}
+                 <span
+                   className="mr-2 flex shrink-0 items-center text-gray-500"
+                   title={describeAddressScheme(addressKind)}
+                 >
+                   {addressKind === 'internal' ? <Terminal size={11} /> : addressKind === 'secure' ? <Lock size={11} /> : <Globe size={11} />}
+                   <span id="navx-address-scheme" className="sr-only">{describeAddressScheme(addressKind)}</span>
+                 </span>
                  <input 
                   id="navx-address-input"
                   type="text" 
                   value={url}
+                  aria-label="Barra de direcciones"
+                  aria-describedby="navx-address-scheme"
+                  aria-expanded={isAutocompleteOpen}
+                  aria-controls="navx-address-suggestions"
+                  aria-autocomplete="list"
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                   onFocus={() => setIsAutocompleteOpen(true)}
                   onBlur={() => setTimeout(() => setIsAutocompleteOpen(false), 200)}
                   onChange={(e) => {
@@ -1220,6 +1255,7 @@ export default function App() {
                         ? "bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20"
                         : "bg-rose-500/10 text-rose-400 border-rose-500/30 hover:bg-rose-500/20"
                     )}
+                    aria-label={pageLoadSpeed !== null ? `Última medición real de carga: ${pageLoadSpeed} milisegundos. Pulsa para volver a medir.` : 'Medir la latencia real de carga de la página'}
                     title={pageLoadSpeed !== null ? `Última medición real de carga: ${pageLoadSpeed} ms. Haz clic para volver a medir.` : 'Latencia real de carga de la página. Haz clic para medir.'}
                   >
                     <Zap size={10} className={cn(isPageLoading ? "animate-bounce text-brand-cyan" : (pageLoadSpeed !== null && pageLoadSpeed < 200 ? "text-emerald-400" : "text-amber-400"))} />
@@ -1230,6 +1266,7 @@ export default function App() {
                     value={targetLang}
                     onChange={(e) => setTargetLang(e.target.value)}
                     onClick={(e) => e.stopPropagation()}
+                    aria-label="Idioma de destino para la traducción"
                     className="bg-[#121214] text-[9px] text-gray-300 font-mono rounded px-1.5 py-0.5 border border-white/10 outline-none cursor-pointer hover:border-brand-cyan/40"
                     title="Idioma de destino para traducción"
                   >
@@ -1286,7 +1323,7 @@ export default function App() {
                onThemeChange={handleThemeChange}
              />
 
-             <div className="flex items-center gap-1.5 border-l border-white/10 pl-3">
+             <div className="flex items-center gap-1.5 border-l border-white/10 pl-3" aria-hidden="true">
                <div className="h-4 w-4 rounded-full bg-grad-x opacity-80" />
                <span className="text-[10px] font-bold text-brand-magenta tracking-widest hidden sm:inline">X CORE</span>
              </div>
@@ -1295,6 +1332,8 @@ export default function App() {
              <button
                type="button"
                onClick={() => setIsXRayOpen(!isXRayOpen)}
+               aria-label="Inspector X-Ray del DOM"
+               aria-pressed={isXRayOpen}
                className={cn(
                  "group flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-bold tracking-widest uppercase transition-all cursor-pointer",
                  isXRayOpen
@@ -1308,7 +1347,10 @@ export default function App() {
              </button>
 
              <button 
+              type="button"
               onClick={() => setIsAiOpen(!isAiOpen)}
+              aria-label="Panel contextual de IA"
+              aria-pressed={isAiOpen}
               className={cn(
                 "group flex items-center gap-1.5 rounded-md px-2 py-1 text-[10px] font-bold tracking-widest uppercase transition-all cursor-pointer",
                 isAiOpen 
@@ -1323,12 +1365,17 @@ export default function App() {
         </header>
 
         {/* Real-time Privacy Shield Interception Toast Bar */}
-        <div className="px-4 bg-[#0d0e11] border-b border-white/5">
+        <div
+          className="px-4 bg-[#0d0e11] border-b border-white/5"
+          role="status"
+          aria-live="polite"
+          aria-atomic="false"
+        >
           <PrivacyToast onOpenPrivacyShield={() => setIsPrivacyShieldOpen(true)} />
         </div>
 
         {/* Dynamic Content */}
-        <div className="relative flex-1 overflow-auto bg-space-black">
+        <div className="relative min-h-0 flex-1 overflow-auto bg-space-black">
           <AnimatePresence mode="wait">
             <motion.div
               key={activeTab}
@@ -1336,6 +1383,9 @@ export default function App() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
+              id="navx-tabpanel"
+              role="tabpanel"
+              aria-labelledby={`navx-tab-${activeTabId}`}
               className="h-full w-full overflow-auto"
             >
               {activeTab === 'dashboard' && (
@@ -1391,6 +1441,8 @@ export default function App() {
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
+                role="complementary"
+                aria-label="Panel contextual de IA"
                 className="absolute right-6 top-6 bottom-6 w-96 z-40"
               >
                 <React.Suspense fallback={<PanelLoading label="Cargando Cortex AI" />}>
@@ -1413,6 +1465,9 @@ export default function App() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.98 }}
                 transition={{ duration: 0.2 }}
+                role="dialog"
+                aria-modal="true"
+                aria-label="Inspector X-Ray del DOM"
                 className="fixed inset-4 sm:inset-8 z-50 rounded-2xl overflow-hidden shadow-[0_25px_100px_rgba(0,0,0,0.9)] border border-brand-magenta/40"
               >
                 <React.Suspense fallback={<PanelLoading label="Cargando inspector X-Ray" />}>

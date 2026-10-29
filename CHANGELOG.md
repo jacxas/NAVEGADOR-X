@@ -2,6 +2,33 @@
 
 All notable changes to this project are documented in this file.
 
+## [v0.3.4-alpha] - 2026-10-29
+
+### Fixed
+- Barra duplicada en la Edición de Escritorio: los tres puntos decorativos de estilo macOS
+  ya no aparecen cuando la ventana tiene su propia barra de título con los controles reales.
+- La barra de direcciones tenía un prefijo fijo `navigatorx://` que se sumaba al valor y
+  duplicaba el esquema. Ahora muestra un icono del esquema real (interna, HTTPS o HTTP) con
+  su descripción para lectores de pantalla.
+- Panel de administración cortado: usaba `calc(100vh - 64px)` y no descontaba la barra de
+  pestañas ni la de direcciones. Ahora ocupa la altura disponible (`h-full min-h-0`).
+- `localhost:3000` se interpretaba como un esquema propio y no se abría nunca; se resuelve
+  como dirección, igual que `127.0.0.1:3000`.
+
+### Added
+- Pruebas unitarias con Vitest y Testing Library (21 pruebas) y paso nuevo en CI.
+- Foco visible en toda la interfaz, con color propio en el tema Light Aura.
+- Pestañas accesibles: `tablist`/`tab`, flechas e Inicio/Fin para moverse, Delete para
+  cerrar y etiquetas para lectores de pantalla.
+- Los diálogos (aviso de minería y traducción) atrapan el foco, se cierran con Escape y
+  devuelven el foco al elemento que los abrió.
+- Enlace «Saltar al contenido», `lang="es"` en el documento y respeto a
+  `prefers-reduced-motion`.
+
+### Changed
+- «Historial» y «Ajustes» de la barra lateral se muestran como no disponibles: antes eran
+  botones que no hacían nada al pulsarlos.
+
 ## [v0.3.3-alpha] - 2026-10-28
 
 ### Security
