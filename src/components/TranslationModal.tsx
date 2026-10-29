@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Languages, 
@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import Markdown from 'react-markdown';
 import { cn } from '@/src/lib/utils';
+import { useFocusTrap } from '@/src/lib/a11y';
 
 interface TranslationModalProps {
   isOpen: boolean;
@@ -48,6 +49,10 @@ export function TranslationModal({
 }: TranslationModalProps) {
   const [copied, setCopied] = useState(false);
   const [selectedLang, setSelectedLang] = useState(data?.targetLanguage || 'Español');
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // El diálogo atrapa el foco mientras está abierto y se cierra con Escape.
+  useFocusTrap(dialogRef, { active: isOpen, onEscape: onClose });
 
   if (!isOpen) return null;
 
@@ -70,6 +75,10 @@ export function TranslationModal({
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
         <motion.div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="translation-title"
           initial={{ opacity: 0, scale: 0.95, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 10 }}
@@ -83,7 +92,7 @@ export function TranslationModal({
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+                  <h3 id="translation-title" className="text-sm font-bold text-white uppercase tracking-wider">
                     Traducción Instantánea
                   </h3>
                   <span className="flex items-center gap-1 text-[9px] font-mono font-semibold px-2 py-0.5 rounded-full bg-brand-cyan/10 text-brand-cyan border border-brand-cyan/20">

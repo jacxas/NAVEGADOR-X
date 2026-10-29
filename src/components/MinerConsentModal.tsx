@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
+import { useFocusTrap } from '@/src/lib/a11y';
 
 interface MinerConsentModalProps {
   onAccept: (cpuCap: number) => void;
@@ -17,20 +18,26 @@ interface MinerConsentModalProps {
 export function MinerConsentModal({ onAccept, onDecline }: MinerConsentModalProps) {
   const [cpuCap, setCpuCap] = useState(30);
   const [accepted, setAccepted] = useState(false);
+  const dialogRef = useRef<HTMLDivElement>(null);
+
+  // Diálogo modal de verdad: el foco no se escapa al fondo y Escape cancela.
+  useFocusTrap(dialogRef, { onEscape: onDecline });
 
   return (
     <div
+      ref={dialogRef}
       className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50"
       role="dialog"
       aria-modal="true"
       aria-labelledby="miner-title"
+      aria-describedby="miner-summary"
     >
       <div className="card max-w-md w-full mx-4 space-y-5">
         <h2 id="miner-title" className="text-xl font-bold bg-grad-x bg-clip-text text-transparent">
           Módulo de minería · Demostración de interfaz
         </h2>
 
-        <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2.5">
+        <div id="miner-summary" className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.07] px-3 py-2.5">
           <AlertTriangle size={15} className="mt-0.5 shrink-0 text-amber-400" />
           <p className="text-[12px] leading-relaxed text-amber-100/90">
             <strong className="text-amber-300">Esto no mina nada.</strong> No se realiza ningún cálculo criptográfico,
@@ -62,7 +69,7 @@ export function MinerConsentModal({ onAccept, onDecline }: MinerConsentModalProp
             step="5"
             value={cpuCap}
             onChange={(e) => setCpuCap(+e.target.value)}
-            className="w-full accent-[#7b2cff]"
+            className="w-full accent-[#7b2cff] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-cyan"
             aria-label="Intensidad del indicador de la demostración"
           />
           <p className="text-xs text-slate-500 mt-1">Es un valor estético: no limita ni reserva CPU real.</p>
@@ -85,6 +92,7 @@ export function MinerConsentModal({ onAccept, onDecline }: MinerConsentModalProp
 
         <div className="flex gap-3">
           <button
+            type="button"
             onClick={() => accepted && onAccept(cpuCap)}
             disabled={!accepted}
             className="flex-1 btn-primary disabled:opacity-40 disabled:cursor-not-allowed !py-2 text-xs uppercase tracking-widest"
@@ -92,6 +100,7 @@ export function MinerConsentModal({ onAccept, onDecline }: MinerConsentModalProp
             Iniciar demostración
           </button>
           <button
+            type="button"
             onClick={onDecline}
             className="flex-1 bg-slate-700 hover:bg-slate-600 rounded-xl py-3 text-xs font-bold uppercase tracking-widest transition-colors"
           >

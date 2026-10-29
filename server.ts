@@ -1,40 +1,48 @@
 import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
-import { fileURLToPath } from "url";
-import fs from "fs";
 import dotenv from "dotenv";
-import { GoogleGenAI } from "@google/genai";
 import { db } from "./db.ts";
+import { GEMINI_MODEL, getGeminiClient, isGeminiConfigured } from "./server/gemini.ts";
+import {
+  createRateLimiter,
+  isSafeId,
+  sanitizeRecord,
+  validateAiQuery,
+  validateTranslate,
+} from "./server/guardrails.ts";
 
 dotenv.config();
 
-let aiClient: GoogleGenAI | null = null;
-function getGeminiClient(): GoogleGenAI | null {
-  if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (apiKey) {
-      aiClient = new GoogleGenAI({
-        apiKey,
-        httpOptions: {
-          headers: {
-            'User-Agent': 'aistudio-build'
-          }
-        }
-      });
-    }
+/**
+ * Interfaz de escucha.
+ *
+ * Por defecto el servidor **solo** atiende en loopback (127.0.0.1): es una
+ * aplicación de escritorio, no un servicio para la red local. Para exponerlo a
+ * propósito, `NAVEGADOR_HOST=0.0.0.0`. Un valor inválido hace fallar el arranque
+ * en vez de escuchar en todas las interfaces por accidente.
+ */
+function resolveHost(): string {
+  const requested = process.env.NAVEGADOR_HOST?.trim() || "127.0.0.1";
+  if (!/^[A-Za-z0-9.:\[\]-]+$/.test(requested)) {
+    throw new Error(`NAVEGADOR_HOST no es una dirección válida: ${requested}`);
   }
-  return aiClient;
+  return requested;
 }
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const HOST = resolveHost();
+const PORT = Number(process.env.PORT || 3000);
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
 
-  app.use(express.json());
+  // Detrás de un proxy no se confía en las cabeceras de reenvío: el limitador
+  // usa la dirección real de la conexión.
+  app.disable("x-powered-by");
+  app.use(express.json({ limit: "256kb" }));
+
+  const aiLimiter = createRateLimiter({ windowMs: 60_000, max: 30 });
+  const writeLimiter = createRateLimiter({ windowMs: 60_000, max: 60 });
 
   // API v1 - VPN
   app.get("/api/v1/vpn/servers", async (req, res) => {
@@ -59,66 +67,87 @@ async function startServer() {
   });
 
   // Sessions
-  app.post("/api/v1/sessions", async (req, res) => {
+  app.post("/api/v1/sessions", writeLimiter, async (req, res) => {
+    // Se copia solo lo serializable y se descartan claves peligrosas: estos
+    // objetos acababan tal cual en un JSON en disco.
+    const data = sanitizeRecord(req.body);
+    if (!data) return res.status(400).json({ error: "El cuerpo debe ser un objeto JSON." });
+
     try {
-      const session = await db.browsingSession.create({ data: req.body });
+      const session = await db.browsingSession.create({ data });
       res.status(201).json(session);
     } catch (error) {
-      res.status(500).json({ error: "Failed to create session" });
+      console.error("Error en POST /api/v1/sessions:", error);
+      res.status(500).json({ error: "No se pudo crear la sesión." });
     }
   });
 
-  app.put("/api/v1/sessions/:id", async (req, res) => {
+  app.put("/api/v1/sessions/:id", writeLimiter, async (req, res) => {
+    if (!isSafeId(req.params.id)) return res.status(400).json({ error: "Identificador no válido." });
+
+    const data = sanitizeRecord(req.body);
+    if (!data) return res.status(400).json({ error: "El cuerpo debe ser un objeto JSON." });
+
     try {
-      const session = await db.browsingSession.update({
-        where: { id: req.params.id }, data: req.body
-      });
+      const session = await db.browsingSession.update({ where: { id: req.params.id }, data });
       res.json(session);
     } catch (error) {
-      res.status(500).json({ error: "Failed to update session" });
+      console.error("Error en PUT /api/v1/sessions/:id:", error);
+      res.status(500).json({ error: "No se pudo actualizar la sesión." });
     }
   });
 
   // AI Preferences
   app.get("/api/v1/ai/preferences/:userId", async (req, res) => {
+    if (!isSafeId(req.params.userId)) return res.status(400).json({ error: "Identificador no válido." });
+
     try {
-      const prefs = await db.aIPreference.findFirst({
-        where: { userId: req.params.userId }
-      });
+      const prefs = await db.aIPreference.findFirst({ where: { userId: req.params.userId } });
       res.json(prefs);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch preferences" });
+      console.error("Error en GET /api/v1/ai/preferences:", error);
+      res.status(500).json({ error: "No se pudieron leer las preferencias." });
     }
   });
 
-  app.put("/api/v1/ai/preferences/:userId", async (req, res) => {
+  app.put("/api/v1/ai/preferences/:userId", writeLimiter, async (req, res) => {
+    if (!isSafeId(req.params.userId)) return res.status(400).json({ error: "Identificador no válido." });
+
+    const data = sanitizeRecord(req.body);
+    if (!data) return res.status(400).json({ error: "El cuerpo debe ser un objeto JSON." });
+
     try {
       const prefs = await db.aIPreference.upsert({
         where: { userId: req.params.userId },
-        update: req.body,
-        create: { ...req.body, userId: req.params.userId }
+        update: data,
+        create: { ...data, userId: req.params.userId }
       });
       res.json(prefs);
     } catch (error) {
-      res.status(500).json({ error: "Failed to save preferences" });
+      console.error("Error en PUT /api/v1/ai/preferences:", error);
+      res.status(500).json({ error: "No se pudieron guardar las preferencias." });
     }
   });
 
   // AI Query via Gemini Server Proxy
-  app.post("/api/v1/ai/query", async (req, res) => {
+  app.post("/api/v1/ai/query", aiLimiter, async (req, res) => {
+    const parsed = validateAiQuery(req.body);
+    if (parsed.ok === false) return res.status(400).json({ error: parsed.error });
+
+    const { prompt, systemInstruction } = parsed.value;
+
     try {
-      const { prompt, model, systemInstruction } = req.body;
       const ai = getGeminiClient();
 
       if (!ai) {
         return res.json({
-          response: `[Modo Offline/Sin API Key] Respuesta simulada a: "${prompt}". Para habilitar Gemini real en el servidor, configure GEMINI_API_KEY en las variables de entorno.`,
+          response: `[Modo Offline/Sin API Key] Respuesta simulada a: "${prompt.slice(0, 500)}". Para habilitar Gemini real en el servidor, configure GEMINI_API_KEY en las variables de entorno.`,
           provider: "Local Offline Engine"
         });
       }
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: GEMINI_MODEL,
         contents: prompt,
         config: {
           systemInstruction: systemInstruction || "Eres la IA contextual e integrada del microkernel 'X Runtime OS' / 'Navegador X'. Responde de forma concisa y profesional.",
@@ -130,19 +159,22 @@ async function startServer() {
         response: response.text || "No se obtuvo respuesta del motor IA.",
         provider: "Gemini 3.6 Flash"
       });
-    } catch (error: any) {
+    } catch (error) {
+      // El detalle se queda en el registro del servidor: puede incluir la URL
+      // interna del proveedor o partes de la petición.
       console.error("Error en /api/v1/ai/query:", error);
-      res.status(500).json({
-        error: "Error en el servidor de IA",
-        details: error.message || String(error)
-      });
+      res.status(502).json({ error: "El proveedor de IA no respondió correctamente." });
     }
   });
 
   // AI Instant Translate via Gemini
-  app.post("/api/v1/ai/translate", async (req, res) => {
+  app.post("/api/v1/ai/translate", aiLimiter, async (req, res) => {
+    const parsed = validateTranslate(req.body);
+    if (parsed.ok === false) return res.status(400).json({ error: parsed.error });
+
+    const { url, targetLanguage, pageContent } = parsed.value;
+
     try {
-      const { url, targetLanguage = "Español", pageContent } = req.body;
       const ai = getGeminiClient();
 
       if (!ai) {
@@ -179,7 +211,7 @@ Responde con un formato elegante en Markdown con la siguiente estructura:
 4. **Highlights / Menú de Navegación Traducido**: 3-4 puntos clave traducidos al ${targetLanguage}.`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3.6-flash",
+        model: GEMINI_MODEL,
         contents: prompt,
         config: {
           temperature: 0.3,
@@ -195,13 +227,19 @@ Responde con un formato elegante en Markdown con la siguiente estructura:
         url,
         provider: "Gemini 3.6 Flash"
       });
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error en /api/v1/ai/translate:", error);
-      res.status(500).json({ 
-        error: "Error al traducir con Gemini API", 
-        details: error.message || String(error) 
-      });
+      res.status(502).json({ error: "El proveedor de IA no respondió correctamente." });
     }
+  });
+
+  // Estado del motor de IA: la interfaz puede avisar de que está en modo local
+  // sin intentar primero una llamada que fallaría. Nunca devuelve la credencial.
+  app.get("/api/v1/ai/status", (req, res) => {
+    res.json({
+      configured: isGeminiConfigured(),
+      model: isGeminiConfigured() ? GEMINI_MODEL : "local-offline",
+    });
   });
 
   // Legacy/Internal Miner Stats
@@ -213,6 +251,12 @@ Responde con un formato elegante en Markdown con la siguiente estructura:
       nodes: 12,
       uptime: "14:02:11"
     });
+  });
+
+  // Una ruta de API que no existe responde JSON, no el index.html del SPA:
+  // si no, el cliente recibe HTML y falla al parsearlo.
+  app.use("/api", (req, res) => {
+    res.status(404).json({ error: "Ruta de API no encontrada." });
   });
 
   // Vite middleware for development
@@ -231,8 +275,32 @@ Responde con un formato elegante en Markdown con la siguiente estructura:
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Navegador X Core running at http://localhost:${PORT}`);
+  // Último recurso: un JSON malformado o un error de middleware no debe tumbar
+  // el proceso ni devolver una traza al cliente.
+  app.use((error: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (res.headersSent) return next(error);
+    if (error?.type === "entity.parse.failed") {
+      return res.status(400).json({ error: "JSON malformado." });
+    }
+    if (error?.type === "entity.too.large") {
+      return res.status(413).json({ error: "El cuerpo de la petición es demasiado grande." });
+    }
+    console.error("Error no controlado en el servidor:", error);
+    res.status(500).json({ error: "Error interno del servidor." });
+  });
+
+  const httpServer = app.listen(PORT, HOST, () => {
+    console.log(`Navegador X Core running at http://${HOST}:${PORT}`);
+  });
+
+  // Un puerto ocupado no debe dejar el proceso «vivo» sin servir nada.
+  httpServer.on("error", (error: NodeJS.ErrnoException) => {
+    if (error.code === "EADDRINUSE") {
+      console.error(`El puerto ${PORT} ya está en uso. Cierra el otro proceso o usa PORT=…`);
+    } else {
+      console.error("No se pudo iniciar el servidor:", error);
+    }
+    process.exitCode = 1;
   });
 }
 

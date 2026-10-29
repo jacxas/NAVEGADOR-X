@@ -2,6 +2,63 @@
 
 All notable changes to this project are documented in this file.
 
+## [v0.3.4-alpha] - 2026-10-29
+
+### Fixed
+- Barra duplicada en la Edición de Escritorio: los tres puntos decorativos de estilo macOS
+  ya no aparecen cuando la ventana tiene su propia barra de título con los controles reales.
+- La barra de direcciones tenía un prefijo fijo `navigatorx://` que se sumaba al valor y
+  duplicaba el esquema. Ahora muestra un icono del esquema real (interna, HTTPS o HTTP) con
+  su descripción para lectores de pantalla.
+- Panel de administración cortado: usaba `calc(100vh - 64px)` y no descontaba la barra de
+  pestañas ni la de direcciones. Ahora ocupa la altura disponible (`h-full min-h-0`).
+- `localhost:3000` se interpretaba como un esquema propio y no se abría nunca; se resuelve
+  como dirección, igual que `127.0.0.1:3000`.
+
+### Added
+- Pruebas unitarias con Vitest y Testing Library (21 pruebas) y paso nuevo en CI.
+- Foco visible en toda la interfaz, con color propio en el tema Light Aura.
+- Pestañas accesibles: `tablist`/`tab`, flechas e Inicio/Fin para moverse, Delete para
+  cerrar y etiquetas para lectores de pantalla.
+- Los diálogos (aviso de minería y traducción) atrapan el foco, se cierran con Escape y
+  devuelven el foco al elemento que los abrió.
+- Enlace «Saltar al contenido», `lang="es"` en el documento y respeto a
+  `prefers-reduced-motion`.
+
+### Changed
+- «Historial» y «Ajustes» de la barra lateral se muestran como no disponibles: antes eran
+  botones que no hacían nada al pulsarlos.
+
+### Added (release)
+- `release.yml` ahora verifica antes de compilar (typecheck + pruebas) y comprueba que la
+  etiqueta coincida con `package.json`; si no, falla en vez de publicar un binario con la
+  versión equivocada.
+- Compilación en ruta corta (`C:\nx`): NSIS generaba includes de más de 260 caracteres y
+  el empaquetado fallaba en carpetas profundas.
+- `SHA256SUMS.txt` adjunto a cada release, y las versiones con sufijo (`-alpha`, `-beta`,
+  `-rc.1`) se marcan como pre-release de forma automática.
+- Firma de código preparada: con los secretos `CSC_LINK`/`CSC_KEY_PASSWORD` el workflow
+  firma y **falla si la firma no es válida**; sin ellos publica sin firmar y lo advierte.
+- `docs/RELEASE.md` (procedimiento y verificación) y `docs/FIRMA-DE-CODIGO.md` (opciones,
+  costes y activación).
+
+### Security (servidor web)
+- El servidor escucha por defecto en **127.0.0.1**, no en `0.0.0.0`. Exponerlo a la red
+  local pasa a ser una decisión explícita (`NAVEGADOR_HOST=0.0.0.0`).
+- Límite de peticiones por origen: 30/min en IA y 60/min en escrituras; responde 429 con
+  `Retry-After`.
+- Validación de entrada: `prompt` ≤ 8 000 caracteres, `pageContent` ≤ 20 000, `url` ≤ 2 048,
+  idioma de destino de una lista cerrada, cuerpo JSON ≤ 256 kB.
+- Las sesiones y preferencias que se guardan en disco se copian con un saneador que
+  descarta `__proto__`/`constructor`/`prototype`, funciones, fechas y profundidad excesiva.
+- Los identificadores de ruta se validan (`^[A-Za-z0-9_-]{1,64}$`).
+- Los errores del proveedor de IA ya no devuelven el mensaje interno al cliente (queda en
+  el registro del servidor); un JSON malformado responde 400 y una ruta de API inexistente
+  responde 404 JSON, no el `index.html`.
+- Un puerto ocupado ya no deja un proceso vivo sin servir nada: informa y sale con error.
+- La credencial de Gemini vive en `server/gemini.ts` y solo se lee de `GEMINI_API_KEY`;
+  hay un endpoint `/api/v1/ai/status` que dice si está configurada sin revelarla.
+
 ## [v0.3.3-alpha] - 2026-10-28
 
 ### Security

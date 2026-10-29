@@ -61,14 +61,29 @@ Directorio recomendado para probar: [pwa.directory](https://pwa.directory).
 ```bash
 npm install
 
-npm run dev            # SPA en http://localhost:3000
+npm run dev            # SPA en http://localhost:3000 (solo loopback)
 npm run lint           # tsc --noEmit
+npm test               # pruebas unitarias (Vitest + Testing Library)
+npm run verify         # lint + pruebas, lo mismo que exige el release
 npm run build          # build del renderer (Vite)
 
 npm run desktop        # compila renderer + main y abre Electron
 npm run package:win    # instalador NSIS + portable
 npm run package:dir    # carpeta desempaquetada (sin instalador)
 ```
+
+El servidor de desarrollo escucha en `127.0.0.1`. Para abrirlo a la red local —solo si
+lo necesitas— usa `NAVEGADOR_HOST=0.0.0.0 npm run dev`; el puerto se cambia con `PORT`.
+
+---
+
+## Releases y firma
+
+- El release se construye **desde la etiqueta** con `.github/workflows/release.yml`
+  (verifica, compila, firma si hay certificado y publica con `SHA256SUMS.txt`).
+- Procedimiento y verificación: [`docs/RELEASE.md`](docs/RELEASE.md).
+- Firma de código: [`docs/FIRMA-DE-CODIGO.md`](docs/FIRMA-DE-CODIGO.md). Hoy los
+  ejecutables van **sin firmar**: Windows puede mostrar «editor desconocido».
 
 ---
 

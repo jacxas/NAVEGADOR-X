@@ -46,6 +46,10 @@ export default defineConfig(({mode}) => {
     server: {
       host: '0.0.0.0',
       port: 3000,
+      // El servidor de desarrollo se puede abrir a través de un proxy con dominio
+      // propio (un túnel o la vista previa del entorno de trabajo). Sin esta lista,
+      // Vite responde 403 «Blocked request. This host is not allowed».
+      allowedHosts: ['.e2b.app', 'localhost', '127.0.0.1'],
       // HMR is disabled in AI Studio via DISABLE_HMR env var.
       // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
       hmr: process.env.DISABLE_HMR !== 'true',

@@ -55,6 +55,9 @@ export function URLAutocomplete({
   return (
     <AnimatePresence>
       <motion.div
+        id="navx-address-suggestions"
+        role="listbox"
+        aria-label="Sugerencias de navegación e historial"
         initial={{ opacity: 0, y: -4, scale: 0.99 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: -4, scale: 0.99 }}
@@ -76,7 +79,10 @@ export function URLAutocomplete({
             {filteredItems.map((item) => (
               <button
                 key={item.id}
+                id={`navx-suggestion-${item.id}`}
                 type="button"
+                role="option"
+                aria-selected={false}
                 onMouseDown={(e) => {
                   e.preventDefault(); // Prevent blur on input
                   onSelect(item);
