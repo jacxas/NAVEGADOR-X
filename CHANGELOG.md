@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented in this file.
 
-## [Sin publicar]
+## [v0.3.6-alpha] - 2026-10-29
 
 ### Changed
 - **El dashboard deja de repetir el navegador.** `ConnectionStatus` se traslada a la pestaña
