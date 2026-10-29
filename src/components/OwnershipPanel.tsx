@@ -27,6 +27,7 @@ import {
 import { cn } from '@/src/lib/utils';
 import { desktopBridge, isDesktopApp, openExternal } from '@/src/lib/desktop';
 import type { NativeAppInfo } from '@/src/types/desktop';
+import { APP_VERSION_LABEL } from '@/src/lib/version';
 
 const REPOSITORY_FALLBACK = 'https://github.com/cryptojacxas-ship-it/NAVEGADOR-X';
 
@@ -44,7 +45,7 @@ export function OwnershipPanel() {
   const author = info?.author || 'cryptojacxas-ship-it';
   const license = info?.license || 'MIT';
   const repository = info?.repository || REPOSITORY_FALLBACK;
-  const version = info?.version || 'v0.3.0-alpha';
+  const version = info?.version || APP_VERSION_LABEL;
 
   const notice = [
     'AVISO DE TITULARIDAD — Navegador X',

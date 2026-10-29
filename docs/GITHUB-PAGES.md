@@ -1,7 +1,8 @@
 # Edición web en GitHub Pages
 
-Estado a 2026-10-29: **workflow listo y verificado en local; el sitio sigue sin
-publicarse porque falta un ajuste que solo puede hacer el propietario del repositorio.**
+Estado a 2026-10-29: **sitio publicado y verificado** en
+https://jacxas.github.io/NAVEGADOR-X/ —con una salvedad importante en el origen de
+Pages, ver «Origen mal configurado» más abajo.
 
 ## Por qué los 4 despliegues anteriores fallaron
 
@@ -34,14 +35,44 @@ pero no borrar, y no afectan a nada una vez que el nuevo workflow funcione.
    `base` absoluto, esto falla antes de publicar.
 4. Sube el artefacto y despliega con `actions/deploy-pages@v4`.
 
-## El único paso que falta (30 segundos)
+## Estado real (comprobado el 2026-10-29 06:05 UTC)
 
-1. GitHub → **Settings** → **Pages**.
-2. *Build and deployment* → **Source: GitHub Actions**.
-3. Actions → **Deploy web edition (GitHub Pages)** → **Run workflow** (o un push a
-   `main`).
+Pages quedó **habilitado**, y el workflow desplegó: la página responde y sirve la
+aplicación (se comprobó leyendo el HTML publicado, no solo el log).
 
-En ese momento la web queda en **https://jacxas.github.io/NAVEGADOR-X/**.
+```
+GET /repos/jacxas/NAVEGADOR-X/pages
+→ status "built", build_type "legacy", source { branch: "main", path: "/" }
+```
+
+### Origen mal configurado (queda un clic)
+
+El origen es **«Deploy from a branch: main / (root)»** (`build_type: legacy`), no
+«GitHub Actions». Consecuencias:
+
+- Cada push a `main` dispara **dos** publicaciones: `pages-build-deployment` (que publica
+  el **código fuente del repositorio**, incluido `index.html` apuntando a `/src/main.tsx`,
+  que no es JS compilado) y mi workflow (que publica `dist/`).
+- La última en terminar es la que se ve. En el push del 06:05 ganó la del workflow, pero
+  es una carrera: en otro push puede quedar publicado el árbol de fuentes y la web se
+  rompe.
+- La API no me deja cambiarlo: `PUT /pages` con `build_type=workflow` devuelve **403
+  `Resource not accessible by integration`**.
+
+**Cambio necesario (Settings → Pages → Build and deployment → Source: GitHub Actions).**
+Al hacerlo desaparece `pages-build-deployment` y solo publica el workflow, con el build
+verificado.
+
+## Verificación hecha
+
+1. `GET /pages` → sitio creado, `html_url: https://jacxas.github.io/NAVEGADOR-X/`.
+2. Run **Deploy web edition (GitHub Pages)** `40827117730`: `build` y `deploy` en verde,
+   incluido el paso `Verify the build works under a subpath`.
+3. **HTML publicado leído**: sirve la aplicación real (cabecera «Saltar al contenido»,
+   pestañas, dashboard), no el `index.html` de desarrollo.
+4. Ahí se detectó un fallo de contenido: la interfaz anunciaba **v0.3.0-alpha** yendo por
+   la 0.3.4. Corregido: la versión se inyecta desde `package.json` (`src/lib/version.ts`)
+   y una prueba comprueba que no vuelva a escribirse a mano.
 
 ## Qué funcionará y qué no en esa URL
 

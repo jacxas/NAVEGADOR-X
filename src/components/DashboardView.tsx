@@ -19,6 +19,7 @@ import {
   Code2,
   Monitor
 } from 'lucide-react';
+import { APP_VERSION, APP_VERSION_LABEL } from '@/src/lib/version';
 import { motion, AnimatePresence } from 'motion/react';
 import { QuickStats } from './QuickStats';
 import { ConnectionStatus } from './ConnectionStatus';
@@ -67,9 +68,9 @@ export function DashboardView({ onNavigate, onOpenDownloads }: DashboardViewProp
   const handleExportSourceBundle = async () => {
     // Genera un manifiesto con lo que el proyecto hace de verdad hoy.
     const host = desktop ? 'Edición de Escritorio (Electron)' : 'Edición Web (navegador)';
-    const projectSummary = `# Navegador X - Runtime OS v0.3.0-alpha
+    const projectSummary = `# Navegador X - Runtime OS ${APP_VERSION_LABEL}
 ===================================================
-Versión: 0.3.0-alpha
+Versión: ${APP_VERSION}
 Contenedor: ${host}
 Kernel Engine: activo (TypeScript)
 Fecha de generación: ${new Date().toISOString()}
@@ -91,7 +92,7 @@ Los instaladores se generan con «npm run package:win».
     const downloadUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = downloadUrl;
-    link.download = 'NavegadorX-v0.3.0-alpha-Info.txt';
+    link.download = `NavegadorX-${APP_VERSION_LABEL}-Info.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -121,7 +122,7 @@ Los instaladores se generan con «npm run package:win».
             <div className="flex flex-wrap items-center gap-2">
               <span className="px-2.5 py-0.5 rounded-full bg-brand-cyan/10 border border-brand-cyan/30 text-brand-cyan text-[10px] font-mono font-bold uppercase tracking-widest flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-brand-cyan animate-ping" />
-                {desktop ? 'Edición Escritorio v0.3.0-alpha' : 'Edición Web v0.3.0-alpha'}
+                {desktop ? `Edición Escritorio ${APP_VERSION_LABEL}` : `Edición Web ${APP_VERSION_LABEL}`}
               </span>
               <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[10px] font-mono font-bold uppercase tracking-widest">
                 Runtime OS v1.0 Sincronizado
@@ -129,7 +130,7 @@ Los instaladores se generan con «npm run package:win».
             </div>
 
             <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight">
-              Navegador <span className="gradient-text">X</span> (v0.3.0-alpha)
+              Navegador <span className="gradient-text">X</span> ({APP_VERSION_LABEL})
             </h1>
 
             <p className="text-xs md:text-sm text-gray-400 leading-relaxed font-sans">
@@ -166,7 +167,7 @@ Los instaladores se generan con «npm run package:win».
               <div className="flex flex-col items-start text-left">
                 <span>{desktop ? 'Ya estás en la Edición de Escritorio' : 'Descargar Edición de Escritorio'}</span>
                 <span className="text-[9px] font-mono lowercase tracking-normal text-black/80 font-bold">
-                  {desktop ? 'instalador y código en el repositorio' : 'instalador .exe disponible (v0.3.0-alpha)'}
+                  {desktop ? 'instalador y código en el repositorio' : `instalador .exe disponible (${APP_VERSION_LABEL})`}
                 </span>
               </div>
             </button>
@@ -237,7 +238,7 @@ Los instaladores se generan con «npm run package:win».
             <div className="space-y-1 flex-1">
               <h4 className="font-bold text-white flex items-center justify-between">
                 Edición de Escritorio
-                <span className="text-[10px] font-mono text-brand-cyan bg-brand-cyan/10 px-2 py-0.5 rounded border border-brand-cyan/30">v0.3.0-alpha</span>
+                <span className="text-[10px] font-mono text-brand-cyan bg-brand-cyan/10 px-2 py-0.5 rounded border border-brand-cyan/30">{APP_VERSION_LABEL}</span>
               </h4>
               <p className="text-gray-300 leading-relaxed">
                 {desktop
@@ -291,7 +292,7 @@ Los instaladores se generan con «npm run package:win».
 
               <div className="space-y-3.5 text-xs text-gray-300 leading-relaxed font-sans max-h-[60vh] overflow-y-auto pr-1">
                 <p>
-                  <strong className="text-white">X Browser</strong> opera como cliente sobre el motor <strong className="text-brand-cyan">X Runtime OS</strong>. La versión actual (<strong className="text-white">v0.3.0-alpha</strong>) añade la configuración de proxy real sobre el contenedor de escritorio.
+                  <strong className="text-white">X Browser</strong> opera como cliente sobre el motor <strong className="text-brand-cyan">X Runtime OS</strong>. La versión actual (<strong className="text-white">{APP_VERSION_LABEL}</strong>) añade mejoras de interfaz y accesibilidad, endurecimiento del servidor web y publicación verificada desde la etiqueta, sobre la pila de red nativa del contenedor de escritorio.
                 </p>
 
                 {/* Status & Roadmap Timeline Matrix */}
@@ -301,7 +302,7 @@ Los instaladores se generan con «npm run package:win».
                       <Info size={14} /> Hoja de Ruta de Lanzamientos
                     </span>
                     <span className="text-[9px] bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded text-emerald-400 font-bold">
-                      Estado: v0.3.0-alpha
+                      Estado: {APP_VERSION_LABEL}
                     </span>
                   </div>
 

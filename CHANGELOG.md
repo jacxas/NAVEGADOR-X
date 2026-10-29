@@ -13,6 +13,9 @@ All notable changes to this project are documented in this file.
 - `docs/GITHUB-PAGES.md` con el estado, el paso que falta y qué funciona en esa URL.
 
 ### Fixed
+- La interfaz anunciaba **v0.3.0-alpha** en seis sitios mientras el producto iba por la
+  0.3.4 (la web publicada lo mostraba). Ahora la versión se inyecta desde `package.json`
+  en el build (`src/lib/version.ts`) y una prueba lo comprueba.
 - Las tipografías no se cargaban: la hoja de estilos importaba Google Fonts y la CSP
   (`style-src 'self'`) lo bloqueaba, así que la interfaz usaba las fuentes del sistema.
   Ahora Inter y JetBrains Mono se empaquetan con el build (`@fontsource-variable`): sin
