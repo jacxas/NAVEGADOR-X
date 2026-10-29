@@ -80,6 +80,31 @@ describe('App (humo)', () => {
     expect(address).toHaveValue('navegador://vpn');
   });
 
+  it('el dashboard ofrece accesos reales y no repite los paneles de otras pestañas', async () => {
+    render(<App />);
+
+    // Accesos que llevan a algún sitio.
+    expect(await screen.findByRole('heading', { name: 'Empezar' })).toBeInTheDocument();
+    // El acceso del dashboard se distingue por su subtítulo.
+    expect(
+      screen.getByRole('button', { name: /Favoritos\s*Guardados en este equipo/ }),
+    ).toBeInTheDocument();
+
+    // Los paneles de red y protecciones viven en sus pestañas (VPN X y Privacy
+    // Shield); repetirlos aquí era lo que hacía que el dashboard pareciese el navegador.
+    expect(screen.queryByRole('heading', { name: 'Conexión de red' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Protecciones activas' })).not.toBeInTheDocument();
+  });
+
+  it('permite copiar y pegar la dirección desde la barra', async () => {
+    render(<App />);
+
+    expect(screen.getByRole('button', { name: 'Copiar la dirección' })).toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: 'Pegar desde el portapapeles en la barra de direcciones' }),
+    ).toBeInTheDocument();
+  });
+
   it('muestra la versión real de package.json, no un texto escrito a mano', async () => {
     render(<App />);
 

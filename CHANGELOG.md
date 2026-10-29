@@ -2,6 +2,37 @@
 
 All notable changes to this project are documented in this file.
 
+## [Sin publicar]
+
+### Changed
+- **El dashboard deja de repetir el navegador.** `ConnectionStatus` se traslada a la pestaña
+  VPN X y `ThreatProtection` al panel Privacy Shield; el hueco lo ocupa `QuickActions`, con seis
+  accesos que funcionan y un bloque «Estado real» (edición, versión, motor, IA, sesión).
+- El dashboard ya no anuncia `Runtime OS v1.0 Sincronizado` ni `Anti-Fingerprint`: muestra los
+  módulos y tareas reales del kernel y las protecciones que sí existen.
+- **Traducción en su sitio en la Edición de Escritorio**: lee el texto del `<webview>`, lo traduce
+  por trozos de 25 nodos y lo reescribe en la propia página, con contador de avance y botón
+  «Original» para deshacer (`src/lib/pageTranslation.ts`). En la edición web el panel pasa a ser
+  lateral y ya no tapa la página.
+
+### Fixed
+- **Copiar y pegar texto.** `navigator.clipboard.writeText` fallaba en silencio (contexto no
+  seguro, iframe sin permiso) y el botón mostraba «Copiado» con el portapapeles vacío. Nuevo
+  `src/lib/clipboard.ts` con API moderna → `execCommand` → error explicable, usado en
+  `TranslationModal`, `OwnershipPanel` y `XRayDOMInspector`. La barra de direcciones gana botones
+  de copiar y pegar.
+- Los paneles con datos (`PrivacyShield`, `XRayDOMInspector`, `TabResourceMonitor`, barra de
+  pestañas) tenían `select-none`: no se podía seleccionar ni copiar una URL, un hash o una
+  métrica. Ahora el texto de la interfaz es seleccionable por defecto.
+- El contador de «Bloqueos Totales» de Privacy Shield estaba sembrado en 1.652 y crecía con un
+  temporizador aleatorio; el «registro en tiempo real» de rastreadores era `Math.random()`. Ahora
+  muestra la cifra real del bloqueador nativo (`blocker:status`) y, en la web, dice que no está
+  disponible.
+- `POST /api/v1/ai/translate` sin clave devolvía como traducción un texto inventado sobre túneles
+  cuánticos y nodos VPN en Suiza. Ahora responde 503 con el motivo y la interfaz lo explica con un
+  acceso a Ajustes de IA.
+- `TranslationModal` llamaba a `useState` después de un `return` condicional (hook condicional).
+
 ## [v0.3.5-alpha] - 2026-10-29
 
 ### Added

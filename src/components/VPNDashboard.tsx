@@ -17,6 +17,7 @@ interface Node {
 }
 
 import { ConnectionPanel } from './ConnectionPanel';
+import { ConnectionStatus } from './ConnectionStatus';
 
 export function VPNDashboard() {
   const [isConnected, setIsConnected] = useState(false);
@@ -57,6 +58,11 @@ export function VPNDashboard() {
 
   return (
     <div className="p-10 max-w-6xl mx-auto grid grid-cols-12 gap-8">
+      {/* Estado real de la conexión: qué hace el programa con tu red y qué no. */}
+      <div className="col-span-12">
+        <ConnectionStatus />
+      </div>
+
       {/* Configuración de red real: esto sí afecta a tu conexión */}
       <div className="col-span-12">
         <NetworkPanel />

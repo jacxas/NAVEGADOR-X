@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { 
   Globe, 
   Lock,
+  Copy,
+  ClipboardPaste,
   Shield, 
   Cpu, 
   Sparkles, 
@@ -76,6 +78,7 @@ import {
   type Tab,
 } from './lib/navigation';
 import { useEscapeToClose } from './lib/a11y';
+import { copyText, readClipboardText } from './lib/clipboard';
 
 /**
  * Traduce los errores de acceso de Firebase a algo que se pueda leer y accionar.
@@ -269,6 +272,12 @@ export default function App() {
     provider?: string;
   } | null>(null);
   const [showTranslationModal, setShowTranslationModal] = useState(false);
+  /** Motivo concreto cuando la traducción en la página no se pudo hacer. */
+  const [translationError, setTranslationError] = useState<string | null>(null);
+  /** Progreso de la traducción hecha dentro de la página (solo escritorio). */
+  const [pageTranslation, setPageTranslation] = useState<
+    { phase: 'idle' | 'translating' | 'done' | 'error'; done: number; total: number; language: string }
+  >({ phase: 'idle', done: 0, total: 0, language: '' });
 
   // Theme Switcher states (Dark Space vs Light Aura)
   const [currentTheme, setCurrentTheme] = useState<ThemeType>(() => {
@@ -334,11 +343,31 @@ export default function App() {
     measurePageLoadSpeed(isBrowsing ? browsingUrl : url);
   }, [activeTab, isBrowsing, browsingUrl]);
 
+  /**
+   * Traducción de la página.
+   *
+   * - Escritorio: se traduce **dentro de la propia página** (el webview es nuestro),
+   *   sin abrir ningún recuadro encima del contenido.
+   * - Web: el iframe es de otro origen y el navegador no permite tocarlo, así que se
+   *   abre el panel lateral de lectura, que NO tapa la página.
+   */
   const handleInstantTranslate = async (overrideLang?: string) => {
     const langToUse = overrideLang || targetLang;
+
+    if (isDesktopApp() && isBrowsing) {
+      setPageTranslation({ phase: 'translating', done: 0, total: 0, language: langToUse });
+      kernel.eventBus.publish(
+        'viewport.command',
+        { action: 'translate-page', language: langToUse },
+        'App',
+      );
+      return;
+    }
+
     setIsTranslating(true);
+    setTranslationError(null);
     setShowTranslationModal(true);
-    
+
     const activeUrl = isBrowsing ? browsingUrl : url;
     
     try {
@@ -356,18 +385,69 @@ export default function App() {
         url: result.url,
         provider: result.provider,
       });
-    } catch (err: any) {
+    } catch (err) {
+      // Antes se rellenaba el panel con una «traducción» de ejemplo que hablaba de
+      // túneles cuánticos: no era la página del usuario. Ahora se explica el motivo.
       console.error('Error durante la traducción:', err);
-      setTranslationData({
-        translatedContent: `### Motor local de demostración [${langToUse}]\n\n**Página Web**: ${activeUrl}\n\nNo se pudo contactar con el motor de IA, así que esta es una respuesta de ejemplo y **no una traducción real del sitio**.\n\nPara obtener traducciones de verdad, configura una GEMINI_API_KEY (en el servidor de la edición web o en el panel de IA de la Edición de Escritorio).`,
-        targetLanguage: langToUse,
-        url: activeUrl,
-        provider: 'Motor local (demostración)'
-      });
+      setTranslationData(null);
+      setTranslationError(
+        err instanceof Error && err.message
+          ? err.message
+          : 'El motor de IA no ha respondido. Comprueba la conexión e inténtalo de nuevo.',
+      );
     } finally {
       setIsTranslating(false);
     }
   };
+
+  /**
+   * El viewport informa del avance de la traducción en la página. Con estos eventos
+   * la barra de estado dice la verdad: cuántos textos se han traducido y cuántos no.
+   */
+  useEffect(() => {
+    const offStarted = kernel.eventBus.subscribe('translation.started', (event) => {
+      const payload = event.payload as { language?: string };
+      setPageTranslation({ phase: 'translating', done: 0, total: 0, language: payload?.language || targetLang });
+    });
+
+    const offProgress = kernel.eventBus.subscribe('translation.progress', (event) => {
+      const payload = event.payload as { done?: number; total?: number; language?: string };
+      setPageTranslation((previous) => ({
+        phase: 'translating',
+        done: payload?.done ?? previous.done,
+        total: payload?.total ?? previous.total,
+        language: payload?.language || previous.language,
+      }));
+    });
+
+    const offDone = kernel.eventBus.subscribe('translation.done', (event) => {
+      const payload = event.payload as { translated?: number; total?: number; failed?: number; language?: string };
+      setPageTranslation({
+        phase: payload?.translated ? 'done' : 'error',
+        done: payload?.translated ?? 0,
+        total: payload?.total ?? 0,
+        language: payload?.language || targetLang,
+      });
+    });
+
+    const offFailed = kernel.eventBus.subscribe('translation.failed', (event) => {
+      const payload = event.payload as { reason?: string } | undefined;
+      setTranslationError(payload?.reason || null);
+      setPageTranslation({ phase: 'error', done: 0, total: 0, language: '' });
+    });
+
+    const offRestored = kernel.eventBus.subscribe('translation.restored', () => {
+      setPageTranslation({ phase: 'idle', done: 0, total: 0, language: '' });
+    });
+
+    return () => {
+      offStarted();
+      offProgress();
+      offDone();
+      offFailed();
+      offRestored();
+    };
+  }, [targetLang]);
 
   const recordVisit = (visitedUrl: string, title?: string) => {
     setHistory((prev) => {
@@ -813,6 +893,32 @@ export default function App() {
     applyUrlNavigation(url, true);
   };
 
+  /**
+   * Copiar y pegar la dirección.
+   *
+   * Pegar con Ctrl+V ya funcionaba, pero el portapapeles del navegador no siempre es
+   * accesible desde código (iframe, permisos). En ese caso se dice qué hacer en vez
+   * de fallar en silencio.
+   */
+  const [addressNotice, setAddressNotice] = useState<string | null>(null);
+
+  const handleCopyAddress = async () => {
+    const result = await copyText(url);
+    setAddressNotice(result.ok ? 'Dirección copiada' : result.error || 'No se pudo copiar');
+    window.setTimeout(() => setAddressNotice(null), 3500);
+  };
+
+  const handlePasteAddress = async () => {
+    const text = await readClipboardText();
+    if (text && text.trim()) {
+      setUrl(text.trim());
+      setAddressNotice('Pegado del portapapeles');
+    } else {
+      setAddressNotice('El navegador no deja leer el portapapeles: usa Ctrl+V en la barra.');
+    }
+    window.setTimeout(() => setAddressNotice(null), 3500);
+  };
+
   // Esquema de la dirección actual: decide el icono y el anuncio para lectores de pantalla.
   const addressKind = addressScheme(url);
 
@@ -1236,6 +1342,38 @@ export default function App() {
                   className="bg-transparent border-none outline-none text-[11px] w-full py-0.5 text-text-main font-mono"
                 />
 
+                {/* Copiar / pegar la dirección: el portapapeles puede estar bloqueado */}
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={handleCopyAddress}
+                    className="rounded p-1 text-gray-500 transition-colors hover:bg-white/10 hover:text-white"
+                    title="Copiar la dirección"
+                    aria-label="Copiar la dirección"
+                  >
+                    <Copy size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePasteAddress}
+                    className="rounded p-1 text-gray-500 transition-colors hover:bg-white/10 hover:text-white"
+                    title="Pegar desde el portapapeles"
+                    aria-label="Pegar desde el portapapeles en la barra de direcciones"
+                  >
+                    <ClipboardPaste size={12} />
+                  </button>
+                </div>
+
+                {addressNotice && (
+                  <span
+                    role="status"
+                    className="shrink-0 truncate pl-2 text-[9px] font-mono text-gray-400"
+                    title={addressNotice}
+                  >
+                    {addressNotice}
+                  </span>
+                )}
+
                 {/* Page Load Speed & Translation Bar */}
                 <div className="flex items-center gap-1.5 ml-2 border-l border-[#3a3a3c] pl-2.5 my-0.5 shrink-0">
                   {/* Page Load Speed Indicator */}
@@ -1282,18 +1420,51 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => handleInstantTranslate()}
-                    disabled={isTranslating}
+                    disabled={isTranslating || pageTranslation.phase === 'translating'}
                     className={cn(
                       "flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-bold tracking-wider uppercase transition-all whitespace-nowrap shadow-sm cursor-pointer",
-                      isTranslating
+                      isTranslating || pageTranslation.phase === 'translating'
                         ? "bg-brand-cyan/20 text-brand-cyan border border-brand-cyan/40 animate-pulse"
                         : "bg-brand-cyan/10 hover:bg-brand-cyan/20 text-brand-cyan border border-brand-cyan/30 hover:border-brand-cyan"
                     )}
-                    title="Traducción Instantánea con Gemini AI"
+                    aria-label={
+                      isBrowsing && isDesktopApp()
+                        ? 'Traducir la página en su sitio'
+                        : 'Traducir el contenido de la página en un panel lateral'
+                    }
+                    title={
+                      isBrowsing && isDesktopApp()
+                        ? 'Traduce la página en su sitio, sin abrir nada encima'
+                        : 'Abre la traducción en un panel lateral (la página sigue visible)'
+                    }
                   >
-                    <Languages size={11} className={isTranslating ? "animate-spin" : ""} />
-                    <span>{isTranslating ? "Traduciendo..." : "Traducir"}</span>
+                    <Languages
+                      size={11}
+                      className={isTranslating || pageTranslation.phase === 'translating' ? "animate-spin" : ""}
+                    />
+                    <span>
+                      {pageTranslation.phase === 'translating'
+                        ? `${pageTranslation.done}/${pageTranslation.total || '…'}`
+                        : isTranslating
+                          ? 'Traduciendo…'
+                          : 'Traducir'}
+                    </span>
                   </button>
+
+                  {pageTranslation.phase === 'done' && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        kernel.eventBus.publish('viewport.command', { action: 'restore-page' }, 'App')
+                      }
+                      className="flex items-center gap-1 px-2 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-[9px] font-bold uppercase tracking-wider text-emerald-400 transition-colors hover:bg-emerald-500/20"
+                      title="Volver al idioma original de la página"
+                      aria-label="Restaurar el idioma original de la página"
+                    >
+                      <RotateCw size={10} />
+                      <span>Original</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1363,6 +1534,43 @@ export default function App() {
              </button>
           </div>
         </header>
+
+        {/* Resultado de la traducción hecha dentro de la página */}
+        {pageTranslation.phase === 'error' && (
+          <div
+            role="status"
+            className="flex shrink-0 items-start gap-3 border-b border-amber-500/25 bg-amber-500/[0.07] px-4 py-2"
+          >
+            <Languages size={14} className="mt-0.5 shrink-0 text-amber-400" />
+            <div className="flex-1">
+              <p className="text-[11px] leading-relaxed text-amber-100/90">
+                {translationError ||
+                  'No se pudo traducir la página en su sitio. En la edición web el contenido viaja en un iframe de otro origen y el navegador no deja modificarlo.'}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setTranslationError(null);
+                setPageTranslation({ phase: 'idle', done: 0, total: 0, language: '' });
+                applyUrlNavigation('navegador://ia');
+              }}
+              className="shrink-0 rounded border border-amber-400/30 px-2 py-0.5 font-mono text-[9px] uppercase tracking-wider text-amber-300 transition-colors hover:bg-amber-400/10"
+            >
+              Ajustes de IA
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTranslationError(null);
+                setPageTranslation({ phase: 'idle', done: 0, total: 0, language: '' });
+              }}
+              className="shrink-0 rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-amber-300/80 transition-colors hover:bg-amber-400/10 hover:text-amber-200"
+            >
+              Cerrar
+            </button>
+          </div>
+        )}
 
         {/* Real-time Privacy Shield Interception Toast Bar */}
         <div
@@ -1497,6 +1705,7 @@ export default function App() {
         onClose={() => setShowTranslationModal(false)}
         data={translationData}
         isLoading={isTranslating}
+        error={translationError}
         onReTranslate={(newLang) => {
           setTargetLang(newLang);
           handleInstantTranslate(newLang);

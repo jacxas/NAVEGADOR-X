@@ -14,6 +14,7 @@ import {
 import Markdown from 'react-markdown';
 import { cn } from '@/src/lib/utils';
 import { useFocusTrap } from '@/src/lib/a11y';
+import { copyText } from '@/src/lib/clipboard';
 
 interface TranslationModalProps {
   isOpen: boolean;
@@ -25,6 +26,8 @@ interface TranslationModalProps {
     provider?: string;
   } | null;
   isLoading?: boolean;
+  /** Motivo por el que no hay traducción (falta de clave, fallo del motor…). */
+  error?: string | null;
   onReTranslate?: (targetLang: string) => void;
   onOpenInAi?: (content: string) => void;
 }
@@ -44,10 +47,12 @@ export function TranslationModal({
   onClose,
   data,
   isLoading,
+  error,
   onReTranslate,
   onOpenInAi,
 }: TranslationModalProps) {
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
   const [selectedLang, setSelectedLang] = useState(data?.targetLanguage || 'Español');
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -56,11 +61,18 @@ export function TranslationModal({
 
   if (!isOpen) return null;
 
-  const handleCopy = () => {
-    if (data?.translatedContent) {
-      navigator.clipboard.writeText(data.translatedContent);
+  const handleCopy = async () => {
+    if (!data?.translatedContent) return;
+    // `navigator.clipboard` puede fallar sin avisar (contexto no seguro, iframe sin
+    // permiso). Aquí se prueba el plan B y, si tampoco, se le dice al usuario qué hacer.
+    const result = await copyText(data.translatedContent);
+    if (result.ok) {
+      setCopyError(null);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    } else {
+      setCopied(false);
+      setCopyError(result.error || 'No se pudo copiar.');
     }
   };
 
@@ -73,16 +85,17 @@ export function TranslationModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+      {/* Panel lateral: no oscurece ni tapa la página, que sigue visible a la izquierda. */}
+      <div className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md">
         <motion.div
           ref={dialogRef}
           role="dialog"
-          aria-modal="true"
           aria-labelledby="translation-title"
-          initial={{ opacity: 0, scale: 0.95, y: 10 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 10 }}
-          className="relative w-full max-w-2xl bg-[#12141a] border border-brand-cyan/30 rounded-2xl shadow-[0_0_50px_rgba(0,240,255,0.15)] overflow-hidden flex flex-col max-h-[85vh]"
+          initial={{ opacity: 0, x: 40 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 40 }}
+          transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+          className="relative ml-auto flex h-full w-full max-w-md flex-col overflow-hidden border-l border-brand-cyan/30 bg-[#12141a] shadow-[-10px_0_40px_rgba(0,0,0,0.5)]"
         >
           {/* Header */}
           <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-[#161922]">
@@ -163,6 +176,17 @@ export function TranslationModal({
                   Adaptando terminología y estructura contextual al {selectedLang}
                 </p>
               </div>
+            ) : error ? (
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.07] p-4">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-amber-300">
+                  No se pudo traducir
+                </p>
+                <p className="mt-2 text-[11px] leading-relaxed text-amber-100/85">{error}</p>
+                <p className="mt-3 text-[10px] leading-relaxed text-gray-500">
+                  En la Edición de Escritorio, abre <strong className="text-gray-300">Ajustes de IA</strong> y guarda
+                  una clave de Gemini: la traducción se hace entonces sobre el texto real de la página.
+                </p>
+              </div>
             ) : data?.translatedContent ? (
               <div className="prose prose-invert max-w-none text-xs space-y-3 font-sans">
                 <div className="p-4 rounded-xl bg-white/[0.03] border border-white/5 leading-relaxed text-gray-300">
@@ -196,6 +220,12 @@ export function TranslationModal({
                   </>
                 )}
               </button>
+
+              {copyError && (
+                <span role="alert" className="text-[10px] leading-tight text-amber-300">
+                  {copyError}
+                </span>
+              )}
 
               {onOpenInAi && data?.translatedContent && (
                 <button

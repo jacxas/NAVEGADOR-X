@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   ShieldCheck, ShieldAlert, EyeOff, Lock, Fingerprint, 
-  Globe, Radio, Zap, Activity, Check, AlertTriangle, 
-  Settings, RefreshCw, X, Sliders, Shield, Terminal, Search
+  Globe, Radio, Zap, Check,
+  X, Sliders, Shield
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
-import { globalEventBus } from '@/src/kernel/EventBus';
 import { SimulationNotice } from './SimulationNotice';
+import { ThreatProtection } from './ThreatProtection';
+import { desktopBridge, isDesktopApp } from '@/src/lib/desktop';
+import type { NativeBlockerStatus } from '@/src/types/desktop';
 
 export interface SiteProtectionConfig {
   domain: string;
@@ -73,22 +75,6 @@ const DEFAULT_SITES: SiteProtectionConfig[] = [
   }
 ];
 
-interface BlockedEventLog {
-  id: string;
-  time: string;
-  domain: string;
-  tracker: string;
-  type: 'Fingerprint' | 'AdTracker' | 'WebRTC' | 'Cookie' | 'Referrer';
-}
-
-const INITIAL_LOGS: BlockedEventLog[] = [
-  { id: '1', time: '10:24:12', domain: 'facebook.com', tracker: 'connect.facebook.net/fbevents.js', type: 'AdTracker' },
-  { id: '2', time: '10:24:08', domain: 'youtube.com', tracker: 'google-analytics.com/g/collect', type: 'Fingerprint' },
-  { id: '3', time: '10:23:55', domain: 'google.com', tracker: 'doubleclick.net/pagead/id', type: 'AdTracker' },
-  { id: '4', time: '10:23:41', domain: 'facebook.com', tracker: 'webrtc.peerconnection.createOffer', type: 'WebRTC' },
-  { id: '5', time: '10:23:10', domain: 'youtube.com', tracker: 'canvas.toDataURL() interception', type: 'Fingerprint' },
-];
-
 interface PrivacyShieldProps {
   currentUrl?: string;
   onClose?: () => void;
@@ -118,12 +104,13 @@ export function PrivacyShield({ currentUrl = 'navegador://dashboard', onClose }:
     return DEFAULT_SITES;
   });
 
-  const [totalBlockedCount, setTotalBlockedCount] = useState<number>(() => {
-    const saved = localStorage.getItem('navegadorx_blocked_total');
-    return saved ? parseInt(saved, 10) : 1652;
-  });
-
-  const [logs, setLogs] = useState<BlockedEventLog[]>(INITIAL_LOGS);
+  /**
+   * Cifra real de bloqueos. Antes se sembraba con 1.652 «bloqueos» inventados y se
+   * incrementaba con un temporizador aleatorio. Ahora viene del bloqueador nativo
+   * de la Edición de Escritorio; en la web simplemente no existe y se dice.
+   */
+  const desktop = isDesktopApp();
+  const [blocker, setBlocker] = useState<NativeBlockerStatus | null>(null);
   const [selectedDomain, setSelectedDomain] = useState<string>(activeDomain);
   const [searchDomain, setSearchDomain] = useState('');
 
@@ -144,80 +131,28 @@ export function PrivacyShield({ currentUrl = 'navegador://dashboard', onClose }:
     localStorage.setItem('navegadorx_privacy_configs', JSON.stringify(siteConfigs));
   }, [siteConfigs]);
 
+  // Cifra real del bloqueador nativo (solo escritorio); se refresca cada 5 s.
   useEffect(() => {
-    localStorage.setItem('navegadorx_blocked_total', totalBlockedCount.toString());
-  }, [totalBlockedCount]);
+    const bridge = desktopBridge();
+    if (!bridge) return;
 
-  // Real-time simulated threat blocking ticker
-  useEffect(() => {
-    if (!shieldMaster) return;
-
-    const trackerSources = [
-      'google-analytics.com/analytics.js',
-      'doubleclick.net/gampad/ads',
-      'criteo.com/delivery/ajs.php',
-      'fingerprintjs2.cdn.net/v3',
-      'webrtc.getLocalIP() blocked',
-      'audioContext.getChannelData() masked',
-      'facebook.com/tr/?id=10284',
-      'hotjar.com/api/v1/recording',
-      'segment.io/v1/import',
-      'scorecardresearch.com/beacon.js'
-    ];
-
-    const types: BlockedEventLog['type'][] = ['AdTracker', 'Fingerprint', 'WebRTC', 'Cookie', 'Referrer'];
-
-    const interval = setInterval(() => {
-      // 30% chance to intercept a new tracker attempt
-      if (Math.random() < 0.35) {
-        const randomTracker = trackerSources[Math.floor(Math.random() * trackerSources.length)];
-        const randomType = types[Math.floor(Math.random() * types.length)];
-        const now = new Date();
-        const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
-
-        const newLog: BlockedEventLog = {
-          id: Date.now().toString(),
-          time: timeStr,
-          domain: selectedDomain,
-          tracker: randomTracker,
-          type: randomType,
-        };
-
-        setLogs(prev => [newLog, ...prev.slice(0, 14)]);
-        setTotalBlockedCount(prev => prev + 1);
-
-        // Map protected data description
-        let protectedData = 'API Web Sensible';
-        if (randomType === 'Fingerprint') protectedData = 'Canvas 2D / AudioContext Noise';
-        else if (randomType === 'WebRTC') protectedData = 'ICE Candidate IP Privada';
-        else if (randomType === 'Cookie') protectedData = 'Supercookie de Terceros';
-        else if (randomType === 'AdTracker') protectedData = 'Script de Telemetría Publicitaria';
-        else if (randomType === 'Referrer') protectedData = 'Cabecera Referrer Restringida';
-
-        // Emit real-time threat blocked event to global Kernel EventBus
-        globalEventBus.publish('privacy.threat_blocked', {
-          id: newLog.id,
-          domain: selectedDomain,
-          tracker: randomTracker,
-          type: randomType,
-          time: timeStr,
-          protectedData,
-        }, 'PrivacyShield');
-
-        // Update site count
-        setSiteConfigs(prev => {
-          const exists = prev.some(s => s.domain === selectedDomain);
-          if (exists) {
-            return prev.map(s => s.domain === selectedDomain ? { ...s, blockedCount: s.blockedCount + 1 } : s);
-          } else {
-            return [...prev, { ...currentConfig, domain: selectedDomain, blockedCount: 1 }];
-          }
-        });
+    let cancelled = false;
+    const read = async () => {
+      try {
+        const status = await bridge.blocker.status();
+        if (!cancelled) setBlocker(status);
+      } catch {
+        if (!cancelled) setBlocker(null);
       }
-    }, 2500);
+    };
 
-    return () => clearInterval(interval);
-  }, [shieldMaster, selectedDomain, currentConfig]);
+    void read();
+    const interval = setInterval(() => void read(), 5000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   // Toggle individual site rule
   const toggleRule = (ruleKey: keyof Omit<SiteProtectionConfig, 'domain' | 'blockedCount'>) => {
@@ -255,7 +190,7 @@ export function PrivacyShield({ currentUrl = 'navegador://dashboard', onClose }:
   };
 
   return (
-    <div className="w-full flex flex-col h-full bg-[#111215] text-white font-sans overflow-hidden select-none">
+    <div className="w-full flex flex-col h-full bg-[#111215] text-white font-sans overflow-hidden">
       <div className="p-3 pb-0">
         <SimulationNotice module="Privacy Shield">
           No modifica Canvas, WebGL, AudioContext ni WebRTC: no se está alterando ninguna huella digital de tu
@@ -319,9 +254,11 @@ export function PrivacyShield({ currentUrl = 'navegador://dashboard', onClose }:
           </span>
           <div className="flex items-baseline gap-1">
             <span className="text-base font-extrabold text-brand-cyan">
-              {totalBlockedCount.toLocaleString()}
+              {blocker ? blocker.totalBlocked.toLocaleString('es-ES') : '—'}
             </span>
-            <span className="text-[8px] text-emerald-400 font-bold">⚡ +12% hoy</span>
+            <span className="text-[8px] text-gray-500 font-bold">
+              {desktop ? (blocker?.enabled ? 'bloqueador activo' : 'bloqueador pausado') : 'no disponible en web'}
+            </span>
           </div>
         </div>
 
@@ -331,10 +268,10 @@ export function PrivacyShield({ currentUrl = 'navegador://dashboard', onClose }:
             <Fingerprint size={10} className="text-purple-400" />
           </span>
           <div className="flex items-baseline gap-1">
-            <span className="text-base font-extrabold text-purple-400">
-              Cifrada
+            <span className="text-base font-extrabold text-gray-400">
+              Sin cambios
             </span>
-            <span className="text-[8px] text-gray-400 font-bold">Canvas Mask</span>
+            <span className="text-[8px] text-gray-500 font-bold">no se falsea</span>
           </div>
         </div>
       </div>
@@ -485,44 +422,19 @@ export function PrivacyShield({ currentUrl = 'navegador://dashboard', onClose }:
           </div>
         </div>
 
-        {/* Real-time Interception Event Log Ticker */}
-        <div className="space-y-1.5 pt-2 border-t border-white/5">
-          <div className="flex items-center justify-between text-[10px] uppercase font-bold text-gray-400 tracking-wider">
-            <span className="flex items-center gap-1">
-              <Activity size={12} className="text-emerald-400 animate-pulse" />
-              Registro en Tiempo Real
-            </span>
-            <span className="text-[8px] font-mono text-gray-500">Live Interceptor</span>
-          </div>
-
-          <div className="bg-[#0a0b0d] rounded-xl border border-white/5 p-2 space-y-1.5 font-mono max-h-48 overflow-y-auto">
-            {logs.map((log) => (
-              <div key={log.id} className="text-[9px] flex items-center justify-between p-1 rounded bg-white/[0.02] border border-white/5">
-                <div className="flex items-center gap-1.5 min-w-0">
-                  <span className="text-gray-500 text-[8px]">{log.time}</span>
-                  <span className={cn(
-                    "px-1 py-0.2 rounded text-[7px] font-bold uppercase",
-                    log.type === 'Fingerprint' && "bg-purple-500/20 text-purple-400",
-                    log.type === 'AdTracker' && "bg-brand-cyan/20 text-brand-cyan",
-                    log.type === 'WebRTC' && "bg-emerald-500/20 text-emerald-400",
-                    log.type === 'Cookie' && "bg-amber-500/20 text-amber-400",
-                    log.type === 'Referrer' && "bg-rose-500/20 text-rose-400"
-                  )}>
-                    {log.type}
-                  </span>
-                  <span className="text-gray-300 truncate">{log.tracker}</span>
-                </div>
-                <span className="text-[8px] text-emerald-400 font-bold shrink-0">Bloqueado</span>
-              </div>
-            ))}
-          </div>
+        {/* Lo que sí está activo y lo que no: sustituye al registro inventado
+            de «rastreadores bloqueados», que se generaba con Math.random(). */}
+        <div className="pt-2 border-t border-white/5">
+          <ThreatProtection compact />
         </div>
       </div>
 
       {/* Footer info */}
       <div className="p-2 bg-[#090a0c] border-t border-white/5 text-[9px] font-mono text-gray-500 flex items-center justify-between">
-        <span>Navegador X Security Engine</span>
-        <span className="text-emerald-400 font-bold">100% On-Device Protection</span>
+        <span>Navegador X · Privacy Shield</span>
+        <span className={desktop ? 'text-emerald-400 font-bold' : 'text-gray-500'}>
+          {desktop ? 'Bloqueador nativo activo' : 'Solo interfaz en la edición web'}
+        </span>
       </div>
     </div>
   );

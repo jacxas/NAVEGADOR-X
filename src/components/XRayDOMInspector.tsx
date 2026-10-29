@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { aiQuery } from '@/src/lib/aiClient';
+import { copyText } from '@/src/lib/clipboard';
 
 export interface DOMElementMetadata {
   id: string;
@@ -193,9 +194,9 @@ Genera un diagnóstico directo en español respondiendo:
     }
   };
 
-  const handleCopyJson = () => {
-    navigator.clipboard.writeText(JSON.stringify(selectedElement, null, 2));
-    setCopiedId(true);
+  const handleCopyJson = async () => {
+    const result = await copyText(JSON.stringify(selectedElement, null, 2));
+    setCopiedId(result.ok);
     setTimeout(() => setCopiedId(false), 2000);
   };
 
@@ -243,7 +244,7 @@ Riesgo: ${selectedElement.riskLevel}
   };
 
   return (
-    <div className="w-full h-full bg-[#0a0b0e] text-white font-sans flex flex-col overflow-hidden select-none">
+    <div className="w-full h-full bg-[#0a0b0e] text-white font-sans flex flex-col overflow-hidden">
       {/* Header */}
       <div className="p-3 bg-[#111318] border-b border-white/10 flex items-center justify-between">
         <div className="flex items-center gap-2">

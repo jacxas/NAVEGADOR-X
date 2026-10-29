@@ -71,11 +71,15 @@ export async function aiTranslate(
     body: JSON.stringify({ url, targetLanguage, pageContent }),
   });
 
+  const data = await response.json().catch(() => ({} as Record<string, unknown>));
+
   if (!response.ok) {
-    throw new Error(`El servicio de traducción respondió ${response.status}`);
+    // El servidor explica el motivo (por ejemplo, que falta la clave de IA).
+    const message =
+      typeof data?.error === 'string' ? data.error : `El servicio de traducción respondió ${response.status}`;
+    throw new Error(message);
   }
 
-  const data = await response.json();
   const provider: string = data.provider || '';
   return {
     success: data.success !== false,
