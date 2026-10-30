@@ -16,7 +16,7 @@ describe('Ollama provider', () => {
       return {
         ok: true,
         json: async () => ({ message: { content: 'Respuesta local' } }),
-      } as Response;
+      } as unknown as Response;
     }) as unknown as typeof fetch;
 
     await expect(callOllama('Hola', { fetchImpl })).resolves.toMatchObject({
@@ -38,7 +38,7 @@ describe('Ollama provider', () => {
     const fetchImpl = vi.fn(async () => ({
       ok: true,
       json: async () => ({ models: [{ name: 'qwen2.5:7b' }] }),
-    }) as Response) as unknown as typeof fetch;
+    }) as unknown as Response) as unknown as typeof fetch;
     await expect(ollamaHealth({ fetchImpl })).resolves.toMatchObject({
       available: true,
       model: 'qwen2.5:7b',
