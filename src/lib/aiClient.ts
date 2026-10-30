@@ -59,7 +59,7 @@ export async function aiTranslate(
   url: string,
   targetLanguage: string,
   pageContent?: string,
-  mode: 'local' | 'cloud' | 'hybrid' = 'local',
+  mode?: 'local' | 'cloud' | 'hybrid',
 ): Promise<AiTranslationResult> {
   const bridge = desktopBridge();
   if (bridge) {
