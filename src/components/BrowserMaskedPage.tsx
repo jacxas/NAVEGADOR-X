@@ -13,8 +13,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft,
-  ArrowRight,
-  RotateCw,
   Shield,
   Zap,
   Activity,
@@ -22,9 +20,7 @@ import {
   Download,
   Lock,
   X,
-  Gauge,
   AlertCircle,
-  MonitorSmartphone,
   MonitorDown,
   Check,
 } from 'lucide-react';
@@ -105,10 +101,6 @@ export function BrowserMaskedPage({ url = 'https://example.com', partition, onEx
     };
   }, []);
 
-  const send = (action: string, payload: Record<string, unknown> = {}) => {
-    kernel.eventBus.publish('viewport.command', { action, ...payload }, 'BrowserMaskedPage');
-  };
-
   const host = (() => {
     try {
       return new URL(state.url).host;
@@ -124,46 +116,12 @@ export function BrowserMaskedPage({ url = 'https://example.com', partition, onEx
         <button
           type="button"
           onClick={onExit}
+          aria-label="Volver al panel de control"
           className="cursor-pointer rounded-lg bg-white/5 px-2 py-1 text-gray-400 ring-1 ring-white/5 transition-all hover:bg-white/10 hover:text-white"
           title="Volver al panel de control"
         >
           <ArrowLeft size={14} />
         </button>
-
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => send('back')}
-            disabled={!state.canGoBack}
-            className={cn(
-              'rounded-md p-1.5 transition-colors',
-              state.canGoBack ? 'text-gray-300 hover:bg-white/10' : 'cursor-not-allowed text-gray-700',
-            )}
-            title="Atrás"
-          >
-            <ArrowLeft size={15} />
-          </button>
-          <button
-            type="button"
-            onClick={() => send('forward')}
-            disabled={!state.canGoForward}
-            className={cn(
-              'rounded-md p-1.5 transition-colors',
-              state.canGoForward ? 'text-gray-300 hover:bg-white/10' : 'cursor-not-allowed text-gray-700',
-            )}
-            title="Adelante"
-          >
-            <ArrowRight size={15} />
-          </button>
-          <button
-            type="button"
-            onClick={() => (state.loading ? send('stop') : send('reload'))}
-            className="rounded-md p-1.5 text-gray-300 transition-colors hover:bg-white/10"
-            title={state.loading ? 'Detener' : 'Recargar'}
-          >
-            {state.loading ? <X size={15} /> : <RotateCw size={15} />}
-          </button>
-        </div>
 
         {/* Barra de dirección */}
         <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-white/10 bg-[#15171c] px-3 py-1">
@@ -182,43 +140,22 @@ export function BrowserMaskedPage({ url = 'https://example.com', partition, onEx
             </>
           )}
 
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            {loadMs !== null && (
-              <span
-                className={cn(
-                  'flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[9px] font-bold',
-                  loadMs < 400
-                    ? 'bg-emerald-500/10 text-emerald-400'
-                    : loadMs < 1200
-                      ? 'bg-amber-500/10 text-amber-400'
-                      : 'bg-rose-500/10 text-rose-400',
-                )}
-                title="Tiempo real de carga de esta página"
-              >
-                <Gauge size={9} />
-                {loadMs} ms
-              </span>
-            )}
+          {!desktop && (
             <span
-              className={cn(
-                'hidden rounded px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wider sm:inline',
-                desktop ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-400',
-              )}
-              title={
-                desktop
-                  ? 'Motor de navegación real (Electron)'
-                  : 'Motor limitado: el navegador solo permite incrustar sitios que no lo bloqueen'
-              }
+              className="ml-auto shrink-0 rounded px-1.5 py-0.5 font-mono text-[8px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-400"
+              title="Motor limitado: el navegador solo permite incrustar sitios que no lo bloqueen"
             >
-              {desktop ? 'Motor real' : 'Modo limitado'}
+              Modo limitado
             </span>
-          </div>
+          )}
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
           <button
             type="button"
             onClick={() => setStatsOpen(!statsOpen)}
+            aria-label="Panel de actividad de la página"
+            aria-expanded={statsOpen}
             className={cn(
               'rounded-md p-1.5 transition-colors',
               statsOpen ? 'bg-brand-cyan/15 text-brand-cyan' : 'text-gray-400 hover:bg-white/10',
@@ -255,15 +192,17 @@ export function BrowserMaskedPage({ url = 'https://example.com', partition, onEx
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={() => void openExternal(REPOSITORY_URL)}
-            className="group relative flex cursor-pointer items-center gap-2 rounded-full bg-white px-4 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-black shadow-[0_0_20px_rgba(255,255,255,0.1)] transition-all hover:bg-brand-cyan"
-            title="Descargar la Edición de Escritorio desde el repositorio"
-          >
-            {desktop ? <MonitorSmartphone size={13} /> : <Download size={13} />}
-            {desktop ? 'ESCRITORIO' : 'DESCARGAR'}
-          </button>
+          {!desktop && (
+            <button
+              type="button"
+              onClick={() => void openExternal(REPOSITORY_URL)}
+              className="group relative flex cursor-pointer items-center gap-2 rounded-full bg-white px-4 py-1 text-[9px] font-black uppercase tracking-[0.2em] text-black shadow-[0_0_20px_rgba(255,255,255,0.1)] transition-all hover:bg-brand-cyan"
+              title="Descargar la Edición de Escritorio desde el repositorio"
+            >
+              <Download size={13} />
+              DESCARGAR
+            </button>
+          )}
         </div>
       </header>
 

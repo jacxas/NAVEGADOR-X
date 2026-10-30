@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented in this file.
 
+## [v0.3.7-alpha] - 2026-10-30
+
+### Changed
+- One address bar instead of two: the page strip no longer repeats back/forward/reload or the URL.
+- The address bar shows the real URL; the decorative `navigatorx://` prefix is gone.
+- Removed the duplicated load-time chip and the “Motor real” badge from the page strip; load time
+  stays in the top bar and in the activity panel.
+- The “Descargar / ESCRITORIO” call to action is hidden inside the desktop edition, where it is redundant.
+
+### Accessibility
+- The page-strip buttons now expose `aria-label` (and `aria-expanded` on the activity panel).
+
 ## [v0.3.6-alpha] - 2026-10-29
 
 ### Changed

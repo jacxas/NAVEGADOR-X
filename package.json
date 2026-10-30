@@ -2,7 +2,7 @@
   "name": "navegador-x",
   "productName": "Navegador X",
   "private": true,
-  "version": "0.3.6-alpha",
+  "version": "0.3.7-alpha",
   "description": "Navegador X â€” cliente de referencia de X Runtime OS. EdiciÃ³n web (SPA) y EdiciÃ³n de Escritorio (Electron) con motor de navegaciÃ³n real.",
   "author": "cryptojacxas-ship-it",
   "license": "MIT",

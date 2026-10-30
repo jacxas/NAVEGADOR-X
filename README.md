@@ -1,6 +1,6 @@
 # Navegador X — Edición de Escritorio
 
-**v0.3.3-alpha** · Windows x64 · Electron 44 / Chromium 152 · Licencia MIT
+**v0.3.7-alpha** · Windows x64 · Electron 44 / Chromium 152 · Licencia MIT
 
 Navegador de escritorio con motor real (Chromium embebido), bloqueo de publicidad a nivel de red, proxy configurable, descargas a disco y **capacidad de instalar PWAs** como aplicaciones con acceso directo y ventana propia.
 
