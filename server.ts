@@ -200,77 +200,82 @@ async function startServer() {
     res.json({ ...status, geminiConfigured: isGeminiConfigured() });
   });
 
-  // AI Instant Translate via Gemini
+  // AI Instant Translate: obey the same explicit local/cloud/hybrid policy.
   app.post("/api/v1/ai/translate", aiLimiter, async (req, res) => {
     const parsed = validateTranslate(req.body);
     if (parsed.ok === false) return res.status(400).json({ error: parsed.error });
 
-    const { url, targetLanguage, pageContent } = parsed.value;
+    const { url, targetLanguage, pageContent, mode } = parsed.value;
+    if (!pageContent) {
+      return res.status(422).json({
+        success: false,
+        error: "No se recibió el contenido de la página. No se puede traducir una URL sin leer su contenido.",
+        code: "PAGE_CONTENT_REQUIRED",
+      });
+    }
+
+    const prompt = `Traduce fielmente el siguiente contenido al idioma "${targetLanguage}".
+No inventes información ni agregues contenido que no aparezca en el original.
+URL de origen: ${url}
+
+CONTENIDO:
+${pageContent}`;
 
     try {
-      const ai = getGeminiClient();
-
-      if (!ai) {
-        // Antes, sin clave, este endpoint devolvía una «traducción» inventada sobre
-        // túneles cuánticos y nodos VPN que no tenían nada que ver con la página.
-        // Es preferible decir la verdad: no hay modelo que traducir.
-        return res.status(503).json({
-          success: false,
-          offline: true,
-          provider: 'Motor local (sin clave)',
-          targetLanguage,
-          url,
-          translatedContent: '',
-          error:
-            'La traducción necesita un modelo de IA. Configura GEMINI_API_KEY en el servidor ' +
-            '(o una clave en Ajustes de IA de la Edición de Escritorio) para activarla.',
-        });
+      if (mode === 'local' || mode === 'hybrid') {
+        try {
+          const result = await callOllama(prompt, {
+            temperature: 0.3,
+            systemInstruction: "Eres un traductor profesional. Conserva el significado, formato y nombres propios.",
+          });
+          return res.json({
+            success: true,
+            translatedContent: result.response,
+            targetLanguage,
+            url,
+            provider: result.provider,
+            offline: true,
+            mode: 'local',
+          });
+        } catch (error) {
+          if (mode === 'local') {
+            return res.status(503).json({
+              success: false,
+              error: "Ollama no está disponible. No se envió el contenido a la nube.",
+              code: "OLLAMA_UNAVAILABLE",
+            });
+          }
+          console.warn("[NavegadorX] Ollama translation unavailable; explicit hybrid fallback:", error);
+        }
       }
 
-      const prompt = `Eres el traductor instantáneo inteligente integrado en el navegador 'Navegador X', alimentado por el modelo Gemini.
-
-Traducción requerida:
-- URL del sitio web: ${url || 'Pestaña Activa de Navegador X'}
-- Idioma de destino: ${targetLanguage}
-${pageContent ? `- Contenido extraído del sitio:\n${pageContent}` : ''}
-
-Por favor traduce el contenido de la página web al idioma de destino "${targetLanguage}".
-Responde con un formato elegante en Markdown con la siguiente estructura:
-1. **Resumen de la Página**: 2 o 3 oraciones que sinteticen el sitio traducido en ${targetLanguage}.
-2. **Titular Traducido**: El título principal adaptado al ${targetLanguage}.
-3. **Contenido Principal Traducido**: La traducción fiel, fluida y precisa de las secciones principales.
-4. **Highlights / Menú de Navegación Traducido**: 3-4 puntos clave traducidos al ${targetLanguage}.`;
-
+      const ai = getGeminiClient();
+      if (!ai) {
+        return res.status(503).json({
+          success: false,
+          error: "Gemini no está configurado para el modo cloud solicitado.",
+          code: "GEMINI_NOT_CONFIGURED",
+        });
+      }
       const response = await ai.models.generateContent({
         model: GEMINI_MODEL,
         contents: prompt,
-        config: {
-          temperature: 0.3,
-        }
+        config: { temperature: 0.3 },
       });
-
-      const translatedContent = response.text || "No se pudo generar la traducción.";
-
       return res.json({
         success: true,
-        translatedContent,
+        translatedContent: response.text || "No se pudo generar la traducción.",
         targetLanguage,
         url,
-        provider: "Gemini 3.6 Flash"
+        provider: "Gemini",
+        offline: false,
+        mode: 'cloud',
+        fallbackUsed: mode === 'hybrid',
       });
     } catch (error) {
       console.error("Error en /api/v1/ai/translate:", error);
-      res.status(502).json({ error: "El proveedor de IA no respondió correctamente." });
+      return res.status(502).json({ success: false, error: "El proveedor de IA no respondió correctamente." });
     }
-  });
-
-  // Estado del motor de IA: la interfaz puede avisar de que está en modo local
-  // sin intentar primero una llamada que fallaría. Nunca devuelve la credencial.
-  app.get("/api/v1/ai/status", (req, res) => {
-    res.json({
-      configured: isGeminiConfigured(),
-      model: isGeminiConfigured() ? GEMINI_MODEL : "local-offline",
-    });
   });
 
   // Legacy/Internal Miner Stats
