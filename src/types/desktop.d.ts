@@ -96,6 +96,8 @@ export interface NavegadorXBridge {
     hasKey: () => Promise<boolean>;
     model: () => Promise<string>;
     mode: () => Promise<'local' | 'cloud' | 'hybrid'>;
+    ollamaModel: () => Promise<string>;
+    setOllamaModel: (model: string) => Promise<{ ok: boolean; model: string; reason?: string }>;
     setMode: (mode: 'local' | 'cloud' | 'hybrid') => Promise<{ ok: boolean; mode: 'local' | 'cloud' | 'hybrid'; reason?: string }>;
     setKey: (credencial: string, model?: string) => Promise<{ hasKey: boolean; model: string }>;
     query: (
