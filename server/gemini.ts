@@ -1,9 +1,7 @@
 /**
- * Cliente de Gemini del servidor web.
- *
- * La credencial se lee **solo** de la variable de entorno `GEMINI_API_KEY`. No hay
- * valor por defecto, ni copia en disco, ni forma de pasarla por la URL: si no está,
- * el servidor responde con el motor local offline y la aplicación sigue arrancando.
+ * Proveedor Gemini del servidor web. La credencial se lee **solo** de la variable
+ * de entorno `GEMINI_API_KEY`. No hay valor por defecto, copia en disco ni forma
+ * de pasarla por la URL. La política local/cloud/hybrid se decide en server.ts.
  */
 
 import { GoogleGenAI } from '@google/genai';
