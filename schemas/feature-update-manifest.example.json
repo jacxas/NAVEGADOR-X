@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "product": "navegador-x",
+  "generatedAt": "2026-10-30T00:00:00.000Z",
+  "artifacts": [
+    {
+      "id": "adblock.rules",
+      "version": "1.0.0",
+      "kind": "rules",
+      "description": "Reglas declarativas de bloqueo",
+      "minCoreVersion": "0.3.6-alpha",
+      "maxCoreVersion": "0.9.0",
+      "channel": "stable",
+      "url": "https://github.com/jacxas/NAVEGADOR-X/releases/download/features-v1/adblock-rules.json",
+      "sha512": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "size": 2048,
+      "permissions": [],
+      "publishedAt": "2026-10-30T00:00:00.000Z"
+    }
+  ]
+}
