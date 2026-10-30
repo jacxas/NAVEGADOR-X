@@ -125,6 +125,7 @@ export async function getVPNGateServers(options: {
   try {
     const response = await (options.fetchImpl ?? fetch)(VPN_GATE_CSV_URL, {
       headers: { Accept: 'text/csv, text/plain;q=0.9' },
+      redirect: 'error',
       signal: controller.signal,
     });
     if (!response.ok) throw new Error(`VPN Gate catalogue returned HTTP ${response.status}.`);
