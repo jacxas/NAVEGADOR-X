@@ -44,7 +44,7 @@ describe('VPN Gate catalogue parser', () => {
   it('fetches the official feed and caches successful results briefly', async () => {
     const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
       expect(String(input)).toBe(VPN_GATE_CSV_URL);
-      return new Response(fixture, { status: 200, headers: { 'content-type': 'text/csv' } });
+      return { ok: true, status: 200, headers: { get: () => 'text/csv' }, text: async () => fixture } as unknown as Response;
     }) as unknown as typeof fetch;
 
     const first = await getVPNGateServers({ fetchImpl, now: 10_000 });
@@ -57,7 +57,7 @@ describe('VPN Gate catalogue parser', () => {
   });
 
   it('does not cache an unsuccessful upstream response', async () => {
-    const fetchImpl = vi.fn(async () => new Response('unavailable', { status: 503 })) as unknown as typeof fetch;
+    const fetchImpl = vi.fn(async () => ({ ok: false, status: 503, headers: { get: () => null }, text: async () => 'unavailable' }) as unknown as Response) as unknown as typeof fetch;
     await expect(getVPNGateServers({ fetchImpl, now: 20_000 })).rejects.toThrow(/503/);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
