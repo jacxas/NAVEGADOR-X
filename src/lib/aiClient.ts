@@ -12,6 +12,33 @@
 
 import { desktopBridge, isDesktopApp } from '@/src/lib/desktop';
 
+export type AiMode = 'local' | 'cloud' | 'hybrid';
+
+export async function aiGetMode(): Promise<AiMode> {
+  const bridge = desktopBridge();
+  if (bridge) return bridge.ai.mode();
+  try {
+    const stored = localStorage.getItem('navegadorx_ai_mode');
+    return stored === 'cloud' || stored === 'hybrid' ? stored : 'local';
+  } catch {
+    return 'local';
+  }
+}
+
+export async function aiSetMode(mode: AiMode): Promise<void> {
+  const bridge = desktopBridge();
+  if (bridge) {
+    const result = await bridge.ai.setMode(mode);
+    if (!result.ok) throw new Error(result.reason || 'No se pudo guardar el modo de IA.');
+    return;
+  }
+  try {
+    localStorage.setItem('navegadorx_ai_mode', mode);
+  } catch {
+    throw new Error('El navegador no permitió guardar la preferencia de modo de IA.');
+  }
+}
+
 export interface AiQueryResult {
   response: string;
   provider: string;
@@ -35,11 +62,12 @@ export async function aiQuery(
   if (bridge) {
     return bridge.ai.query(prompt, options);
   }
+  const mode = options?.mode || await aiGetMode();
 
   const response = await fetch('/api/v1/ai/query', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, systemInstruction: options?.systemInstruction, mode: options?.mode || 'local' }),
+    body: JSON.stringify({ prompt, systemInstruction: options?.systemInstruction, mode }),
   });
 
   const data = await response.json().catch(() => ({} as Record<string, unknown>));
@@ -65,11 +93,12 @@ export async function aiTranslate(
   if (bridge) {
     return bridge.ai.translate(url, targetLanguage, pageContent, mode);
   }
+  const selectedMode = mode || await aiGetMode();
 
   const response = await fetch('/api/v1/ai/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, targetLanguage, pageContent, mode }),
+    body: JSON.stringify({ url, targetLanguage, pageContent, mode: selectedMode }),
   });
 
   const data = await response.json().catch(() => ({} as Record<string, unknown>));
