@@ -104,6 +104,7 @@ export interface TranslateInput {
   url: string;
   targetLanguage: TargetLanguage;
   pageContent?: string;
+  mode: 'local' | 'cloud' | 'hybrid';
 }
 
 export function validateTranslate(body: unknown): ValidationResult<TranslateInput> {
@@ -129,7 +130,12 @@ export function validateTranslate(body: unknown): ValidationResult<TranslateInpu
     pageContent = parsed;
   }
 
-  return { ok: true, value: { url, targetLanguage: targetLanguage as TargetLanguage, pageContent } };
+  const mode = input.mode === undefined ? 'local' : input.mode;
+  if (mode !== 'local' && mode !== 'cloud' && mode !== 'hybrid') {
+    return { ok: false, error: '«mode» debe ser local, cloud o hybrid.' };
+  }
+
+  return { ok: true, value: { url, targetLanguage: targetLanguage as TargetLanguage, pageContent, mode } };
 }
 
 // ---------------------------------------------------------------------------
