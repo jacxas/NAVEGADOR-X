@@ -4,6 +4,7 @@ import path from "path";
 import dotenv from "dotenv";
 import { db } from "./db.ts";
 import { GEMINI_MODEL, getGeminiClient, isGeminiConfigured } from "./server/gemini.ts";
+import { getVPNGateServers } from "./server/vpn-gate.ts";
 import {
   createRateLimiter,
   isSafeId,
@@ -44,26 +45,34 @@ async function startServer() {
   const aiLimiter = createRateLimiter({ windowMs: 60_000, max: 30 });
   const writeLimiter = createRateLimiter({ windowMs: 60_000, max: 60 });
 
-  // API v1 - VPN
-  app.get("/api/v1/vpn/servers", async (req, res) => {
+  // API v1 - VPN Gate catalogue. Discovery is real; tunnel control is not
+  // exposed until the native OpenVPN process adapter is implemented and tested.
+  app.get("/api/v1/vpn/servers", async (_req, res) => {
     try {
-      const servers = await db.vPNServer.findMany();
-      res.json(servers);
+      const result = await getVPNGateServers();
+      res.setHeader("Cache-Control", "public, max-age=30");
+      res.json(result);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch servers" });
+      console.error("[VPN Gate] Catalogue unavailable:", error);
+      res.status(502).json({
+        error: "VPN Gate catalogue is temporarily unavailable.",
+        code: "VPN_GATE_CATALOGUE_UNAVAILABLE",
+      });
     }
   });
 
-  app.post("/api/v1/vpn/connect", async (req, res) => {
-    const { serverId, protocol } = req.body;
-    if (!serverId || !protocol) return res.status(400).json({ error: "Faltan parámetros" });
-    // Aquí: llamar a WireGuard/OpenVPN wrapper
-    res.json({ status: "connected", serverId, protocol });
+  app.post("/api/v1/vpn/connect", (_req, res) => {
+    res.status(501).json({
+      error: "Native OpenVPN adapter is not installed. No VPN connection was started.",
+      code: "VPN_NATIVE_ADAPTER_NOT_IMPLEMENTED",
+    });
   });
 
-  app.post("/api/v1/vpn/disconnect", async (req, res) => {
-    // Aquí: cerrar tunnel VPN
-    res.json({ status: "disconnected" });
+  app.post("/api/v1/vpn/disconnect", (_req, res) => {
+    res.status(501).json({
+      error: "Native OpenVPN adapter is not installed. No VPN connection state is available.",
+      code: "VPN_NATIVE_ADAPTER_NOT_IMPLEMENTED",
+    });
   });
 
   // Sessions
