@@ -6,8 +6,8 @@
  * - Web: se usan los endpoints `/api/v1/ai/*` del servidor Express, que aplican
  *   exactamente la misma política (clave en servidor y fallback local sin clave).
  *
- * Sin clave configurada, ambos entornos responden desde el motor local offline,
- * de modo que la aplicación nunca depende de un servicio externo para arrancar.
+ * Ollama local es la ruta predeterminada. Si no está disponible, la consulta falla
+ * sin enviar datos a la nube. Cloud e híbrido requieren selección explícita.
  */
 
 import { desktopBridge, isDesktopApp } from '@/src/lib/desktop';
@@ -42,11 +42,11 @@ export async function aiQuery(
     body: JSON.stringify({ prompt, systemInstruction: options?.systemInstruction, mode: options?.mode || 'local' }),
   });
 
+  const data = await response.json().catch(() => ({} as Record<string, unknown>));
   if (!response.ok) {
-    throw new Error(`El servidor de IA respondió ${response.status}`);
+    const message = typeof data.error === 'string' ? data.error : `El servidor de IA respondió ${response.status}`;
+    throw new Error(message);
   }
-
-  const data = await response.json();
   const provider: string = data.provider || 'Desconocido';
   return {
     response: data.response || '',
@@ -88,7 +88,7 @@ export async function aiTranslate(
     provider,
     targetLanguage: data.targetLanguage || targetLanguage,
     url: data.url || url,
-    offline: /fallback|offline/i.test(provider),
+    offline: data.offline === true || /fallback|offline/i.test(provider),
   };
 }
 
