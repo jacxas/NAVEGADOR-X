@@ -197,7 +197,7 @@ async function startServer() {
 
   app.get("/api/v1/ai/local-status", async (_req, res) => {
     const status = await ollamaHealth();
-    res.json(status);
+    res.json({ ...status, geminiConfigured: isGeminiConfigured() });
   });
 
   // AI Instant Translate via Gemini
