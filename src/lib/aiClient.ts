@@ -29,7 +29,7 @@ export interface AiTranslationResult {
 
 export async function aiQuery(
   prompt: string,
-  options?: { systemInstruction?: string; temperature?: number },
+  options?: { systemInstruction?: string; temperature?: number; mode?: 'local' | 'cloud' | 'hybrid' },
 ): Promise<AiQueryResult> {
   const bridge = desktopBridge();
   if (bridge) {
@@ -39,7 +39,7 @@ export async function aiQuery(
   const response = await fetch('/api/v1/ai/query', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, model: 'default', systemInstruction: options?.systemInstruction }),
+    body: JSON.stringify({ prompt, systemInstruction: options?.systemInstruction, mode: options?.mode || 'local' }),
   });
 
   if (!response.ok) {
@@ -98,14 +98,10 @@ export async function aiHasKey(): Promise<boolean> {
   // En web la clave vive en el servidor: si el endpoint responde sin proveedor
   // real, el propio servidor devolverá el motor local.
   try {
-    const response = await fetch('/api/v1/ai/query', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: '__probe__' }),
-    });
+    const response = await fetch('/api/v1/ai/local-status', { method: 'GET' });
     if (!response.ok) return false;
     const data = await response.json();
-    return !/offline/i.test(data.provider || '');
+    return data.geminiConfigured === true;
   } catch {
     return false;
   }
