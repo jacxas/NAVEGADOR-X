@@ -28,7 +28,11 @@ describe('VPN Gate OpenVPN profile validator', () => {
     expect(profile.text).toContain('dhcp-option DNS 1.1.1.1');
   });
 
-  it('normalizes the tcp alias to tcp-client', () => {\n    const profile = validateOpenVPNProfile(safeProfile.replace('proto tcp-client', 'proto tcp'));\n    expect(profile.remote.protocol).toBe('tcp-client');\n  });\n\n  it('rejects script, plugin, config and management directives', () => {
+  it('normalizes the tcp alias to tcp-client', () => {
+    const profile = validateOpenVPNProfile(safeProfile.replace('proto tcp-client', 'proto tcp'));
+    expect(profile.remote.protocol).toBe('tcp-client');
+  });
+  it('rejects script, plugin, config and management directives', () => {
     for (const directive of [
       'up /tmp/payload',
       'down /tmp/payload',
