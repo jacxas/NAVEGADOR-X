@@ -91,9 +91,10 @@ export function AiEngineSettings() {
         <div className="flex items-start gap-2">
           <Cpu size={12} className="mt-0.5 shrink-0 text-brand-cyan" />
           <p className="text-[10px] leading-relaxed text-gray-500">
-            En la edición web la clave se configura en el servidor con la variable de entorno{' '}
-            <code className="font-mono text-brand-cyan">GEMINI_API_KEY</code>. Sin ella, el servidor responde desde el
-            Ollama local. Las consultas usan el modo local por defecto; para cloud o híbrido, selecciona el modo explícitamente en la configuración de escritorio.
+            En la edición web, el servidor necesita Ollama en el mismo host (127.0.0.1:11434) y el modelo indicado por{' '}
+            <code className="font-mono text-brand-cyan">OLLAMA_MODEL</code>. Las consultas usan modo local por defecto y no
+            se envían a Gemini. Para habilitar Cloud o Hybrid, el cliente debe solicitarlo explícitamente y el servidor
+            debe tener <code className="font-mono text-brand-cyan">GEMINI_API_KEY</code>.
           </p>
         </div>
       </div>
