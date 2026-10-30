@@ -74,13 +74,13 @@ describe('VPN Gate catalogue parser', () => {
       'QUJDREVGRw==',
       '-----END CERTIFICATE-----',
       '</ca>',
-    ].join('\\n');
+    ].join('\n');
     const encoded = Buffer.from(profile, 'utf8').toString('base64');
     const csv = [
       '*VPN Gate Public VPN Relay Servers List',
       'HostName,IP,OpenVPN_ConfigData_Base64',
       `relay.example,1.2.3.4,${encoded}`,
-    ].join('\\n');
+    ].join('\n');
     const fetchImpl = vi.fn(async () => ({
       ok: true,
       status: 200,
