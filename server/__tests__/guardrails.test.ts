@@ -16,10 +16,10 @@ describe('validateAiQuery', () => {
   it('acepta un prompt normal y recorta espacios', () => {
     const result = validateAiQuery({ prompt: '  hola  ' });
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.prompt).toBe('hola');
+    if (result.ok) {\n      expect(result.value.prompt).toBe('hola');\n      expect(result.value.mode).toBe('local');\n    }
   });
 
-  it('rechaza cuerpos que no son objetos', () => {
+  it('admite solo modos local, cloud o hybrid', () => {\n    expect(validateAiQuery({ prompt: 'x', mode: 'local' }).ok).toBe(true);\n    expect(validateAiQuery({ prompt: 'x', mode: 'cloud' }).ok).toBe(true);\n    expect(validateAiQuery({ prompt: 'x', mode: 'hybrid' }).ok).toBe(true);\n    expect(validateAiQuery({ prompt: 'x', mode: 'automatic' }).ok).toBe(false);\n  });\n\n  it('rechaza cuerpos que no son objetos', () => {
     for (const body of [null, undefined, 'texto', 42, ['a']]) {
       const result = validateAiQuery(body);
       expect(result.ok).toBe(false);
