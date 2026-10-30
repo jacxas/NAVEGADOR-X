@@ -10,8 +10,8 @@
  *  - Los <webview> de contenido remoto se endurecen en `will-attach-webview`.
  *  - La SPA se sirve por el esquema propio `app://bundle` (origen estándar y seguro),
  *    de modo que localStorage, IndexedDB y Firebase funcionan igual que en la web.
- *  - Modo autónomo: sin GEMINI_API_KEY la app arranca y funciona igual; el motor
- *    de IA cae a un modo local sin red.
+ *  - IA local-first: Ollama corre en loopback; Gemini solo se usa en modos cloud
+ *    o hybrid seleccionados explícitamente por el usuario.
  */
 
 import {
