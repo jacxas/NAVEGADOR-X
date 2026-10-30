@@ -49,7 +49,7 @@ describe('validateTranslate', () => {
     if (result.ok) expect(result.value.targetLanguage).toBe('English');
   });
 
-  it('exige url', () => {
+  it('usa modo local por defecto y valida modos explícitos', () => {\n    const local = validateTranslate({ url: 'https://a.test', targetLanguage: 'Español' });\n    expect(local.ok && local.value.mode).toBe('local');\n    expect(validateTranslate({ url: 'https://a.test', targetLanguage: 'Español', mode: 'hybrid' }).ok).toBe(true);\n    expect(validateTranslate({ url: 'https://a.test', targetLanguage: 'Español', mode: 'automatic' }).ok).toBe(false);\n  });\n\n  it('exige url', () => {
     expect(validateTranslate({ targetLanguage: 'Español' }).ok).toBe(false);
     expect(validateTranslate({ url: '', targetLanguage: 'Español' }).ok).toBe(false);
   });
