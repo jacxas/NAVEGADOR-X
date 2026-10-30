@@ -316,13 +316,7 @@ async function callGemini(
     };
   } catch (error: any) {
     console.error('[NavegadorX] Error al consultar Gemini:', error);
-    return {
-      response:
-        `[Error del motor de IA] ${error?.message || String(error)}\n\n` +
-        `La aplicación sigue funcionando en modo autónomo; revisa tu clave o tu conexión.`,
-      provider: 'Local Offline Engine',
-      offline: true,
-    };
+    throw new Error(`Gemini no respondió correctamente: ${error?.message || String(error)}`);
   } finally {
     clearTimeout(timeout);
   }
