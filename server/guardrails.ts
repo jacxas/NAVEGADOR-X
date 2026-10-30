@@ -77,6 +77,7 @@ export function isSafeId(value: unknown): value is string {
 export interface AiQueryInput {
   prompt: string;
   systemInstruction?: string;
+  mode: 'local' | 'cloud' | 'hybrid';
 }
 
 export function validateAiQuery(body: unknown): ValidationResult<AiQueryInput> {
@@ -97,7 +98,12 @@ export function validateAiQuery(body: unknown): ValidationResult<AiQueryInput> {
     systemInstruction = parsed;
   }
 
-  const mode = input.mode === undefined ? 'local' : input.mode;\n  if (mode !== 'local' && mode !== 'cloud' && mode !== 'hybrid') {\n    return { ok: false, error: '«mode» debe ser local, cloud o hybrid.' };\n  }\n\n  return { ok: true, value: { prompt, systemInstruction, mode } };
+  const mode = input.mode === undefined ? 'local' : input.mode;
+  if (mode !== 'local' && mode !== 'cloud' && mode !== 'hybrid') {
+    return { ok: false, error: '«mode» debe ser local, cloud o hybrid.' };
+  }
+
+  return { ok: true, value: { prompt, systemInstruction, mode } };
 }
 
 export interface TranslateInput {
