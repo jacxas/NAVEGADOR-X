@@ -1010,6 +1010,17 @@ function registerIpcHandlers(): void {
   ipcMain.handle('ai:has-key', () => Boolean(geminiApiKey()));
   ipcMain.handle('ai:model', () => geminiModel());
   ipcMain.handle('ai:mode', () => configuredAiMode());
+  ipcMain.handle('ai:ollama-model', () => configuredOllamaModel());
+  ipcMain.handle('ai:set-ollama-model', (_event, model: string) => {
+    const value = typeof model === 'string' ? model.trim() : '';
+    if (!/^[a-zA-Z0-9._:-]{1,128}$/.test(value)) {
+      return { ok: false, model: configuredOllamaModel(), reason: 'Nombre de modelo Ollama no válido.' };
+    }
+    const settings = readSettings();
+    settings.ollamaModel = value;
+    writeSettings(settings);
+    return { ok: true, model: value };
+  });
   ipcMain.handle('ai:set-mode', (_event, mode: AiMode) => {
     if (mode !== 'local' && mode !== 'cloud' && mode !== 'hybrid') {
       return { ok: false, mode: configuredAiMode(), reason: 'Modo de IA no válido.' };
