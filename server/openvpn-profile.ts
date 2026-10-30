@@ -69,7 +69,7 @@ function validateDirective(name: string, args: string[]): void {
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Remote port is invalid.');
     if (args[2] && args[2] !== 'udp' && args[2] !== 'tcp' && args[2] !== 'tcp-client') throw new Error('Remote protocol is invalid.');
   }
-  if (name === 'redirect-gateway' && args.some((arg) => !['def1', 'bypass-dhcp', 'bypass-dns', 'ipv6'].includes(arg))) {
+  if (name === 'redirect-gateway' && args.some((arg) => !['def1', 'bypass-dhcp', 'bypass-dns'].includes(arg))) {
     throw new Error('Unsupported redirect-gateway option.');
   }
   if (name === 'dhcp-option' && (args.length !== 2 || args[0] !== 'DNS' || !validIPv4(args[1]))) {
@@ -82,13 +82,13 @@ function validateDirective(name: string, args: string[]): void {
     if (args[2] && args[2] !== 'vpn_gateway' && args[2] !== 'net_gateway' && !validIPv4(args[2])) {
       throw new Error('Route gateway is invalid.');
     }
-    if (args[3] && !/^\\d{1,5}$/.test(args[3])) throw new Error('Route metric is invalid.');
+    if (args[3] && !/^\d{1,5}$/.test(args[3])) throw new Error('Route metric is invalid.');
   }
   if (name === 'route-ipv6') throw new Error('IPv6 route directives are not enabled in this integration phase.');
   if (name === 'verb' && (args.length !== 1 || !/^[0-6]$/.test(args[0]))) throw new Error('Verb level is invalid.');
   if (name === 'key-direction' && (args.length !== 1 || !['0', '1'].includes(args[0]))) throw new Error('Key direction is invalid.');
-  if (['explicit-exit-notify', 'connect-retry-max', 'reneg-sec', 'tun-mtu', 'mssfix', 'ping', 'ping-restart'].includes(name) && (args.length !== 1 || !/^\\d{1,5}$/.test(args[0]))) throw new Error(`Invalid numeric value for ${name}.`);
-  if (name === 'connect-retry' && (args.length < 1 || args.length > 2 || args.some((value) => !/^\\d{1,5}$/.test(value)))) throw new Error('connect-retry value is invalid.');
+  if (['explicit-exit-notify', 'connect-retry-max', 'reneg-sec', 'tun-mtu', 'mssfix', 'ping', 'ping-restart'].includes(name) && (args.length !== 1 || !/^\d{1,5}$/.test(args[0]))) throw new Error(`Invalid numeric value for ${name}.`);
+  if (name === 'connect-retry' && (args.length < 1 || args.length > 2 || args.some((value) => !/^\d{1,5}$/.test(value)))) throw new Error('connect-retry value is invalid.');
   if (['cipher', 'data-ciphers', 'auth', 'tls-version-min'].includes(name) &&
       (args.length !== 1 || !/^[A-Za-z0-9:_-]{1,64}$/.test(args[0]))) {
     throw new Error(`Invalid value for ${name}.`);
@@ -165,11 +165,13 @@ export function validateOpenVPNProfile(source: string): ValidatedOpenVPNProfile 
     if (name === 'client') hasClient = true;
     if (name === 'dev') hasTun = true;
     if (name === 'proto') {
+      if (hasProto) throw new Error('Multiple proto directives are not permitted.');
       hasProto = true;
       selectedProtocol = args[0] === 'tcp' ? 'tcp-client' : args[0] as 'udp' | 'tcp-client';
       if (remote) remote = { ...remote, protocol: selectedProtocol };
     }
     if (name === 'remote') {
+      if (remote) throw new Error('Multiple remote endpoints are not permitted.');
       remote = { host: args[0], port: Number(args[1]), protocol: (args[2] === 'tcp' ? 'tcp-client' : args[2] as 'udp' | 'tcp-client' | undefined) || selectedProtocol };
     }
   }
