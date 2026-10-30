@@ -4,6 +4,8 @@
  * This module only discovers and normalizes public OpenVPN endpoints. It does
  * not establish a VPN tunnel and never reports a connection as active.
  */
+import { validateOpenVPNProfile, type ValidatedOpenVPNProfile } from './openvpn-profile';
+
 export const VPN_GATE_CSV_URL = 'https://www.vpngate.net/api/iphone/';
 export const VPN_GATE_CACHE_TTL_MS = 60_000;
 const MAX_CSV_BYTES = 8 * 1024 * 1024;
@@ -146,4 +148,56 @@ export async function getVPNGateServers(options: {
 export function clearVPNGateCache(): void {
   cachedServers = [];
   cachedAt = 0;
+}
+
+
+/**
+ * Fetches and validates one relay profile for trusted main-process use.
+ * Never expose this result to the renderer: it contains inline private key
+ * material supplied by the volunteer relay operator.
+ */
+export async function getVPNGateOpenVPNProfile(
+  ip: string,
+  options: { fetchImpl?: typeof fetch } = {},
+): Promise<ValidatedOpenVPNProfile> {
+  if (!validIPv4(ip)) throw new Error('VPN Gate relay IP is invalid.');
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 12_000);
+  try {
+    const response = await (options.fetchImpl ?? fetch)(VPN_GATE_CSV_URL, {
+      headers: { Accept: 'text/csv, text/plain;q=0.9' },
+      redirect: 'error',
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`VPN Gate catalogue returned HTTP ${response.status}.`);
+    const declaredLength = Number(response.headers.get('content-length') || 0);
+    if (declaredLength > MAX_CSV_BYTES) throw new Error('VPN Gate catalogue exceeds the size limit.');
+    const csv = await response.text();
+    if (csv.length > MAX_CSV_BYTES) throw new Error('VPN Gate catalogue exceeds the size limit.');
+
+    const lines = csv.replace(/^\uFEFF/, '').split(/\r?\n/);
+    const headerIndex = lines.findIndex((line) => line.startsWith('HostName,'));
+    if (headerIndex < 0) throw new Error('VPN Gate CSV header was not found.');
+    const headers = parseCsvLine(lines[headerIndex]);
+    const ipIndex = headers.indexOf('IP');
+    const profileIndex = headers.indexOf('OpenVPN_ConfigData_Base64');
+    if (ipIndex < 0 || profileIndex < 0) throw new Error('VPN Gate CSV schema is missing profile columns.');
+
+    for (const line of lines.slice(headerIndex + 1)) {
+      if (!line.trim() || line.startsWith('*')) continue;
+      const cells = parseCsvLine(line);
+      if ((cells[ipIndex] || '').trim() !== ip) continue;
+      const encoded = (cells[profileIndex] || '').trim();
+      if (!encoded || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) throw new Error('VPN Gate profile encoding is invalid.');
+      const decoded = Buffer.from(encoded, 'base64');
+      if (decoded.toString('base64').replace(/=+$/, '') !== encoded.replace(/=+$/, '')) {
+        throw new Error('VPN Gate profile is not canonical base64.');
+      }
+      return validateOpenVPNProfile(decoded.toString('utf8'));
+    }
+    throw new Error('The selected VPN Gate relay no longer exists in the live catalogue.');
+  } finally {
+    clearTimeout(timeout);
+  }
 }
