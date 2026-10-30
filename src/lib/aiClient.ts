@@ -59,16 +59,17 @@ export async function aiTranslate(
   url: string,
   targetLanguage: string,
   pageContent?: string,
+  mode: 'local' | 'cloud' | 'hybrid' = 'local',
 ): Promise<AiTranslationResult> {
   const bridge = desktopBridge();
   if (bridge) {
-    return bridge.ai.translate(url, targetLanguage, pageContent);
+    return bridge.ai.translate(url, targetLanguage, pageContent, mode);
   }
 
   const response = await fetch('/api/v1/ai/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, targetLanguage, pageContent }),
+    body: JSON.stringify({ url, targetLanguage, pageContent, mode }),
   });
 
   const data = await response.json().catch(() => ({} as Record<string, unknown>));
