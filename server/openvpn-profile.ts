@@ -75,12 +75,20 @@ function validateDirective(name: string, args: string[]): void {
   if (name === 'dhcp-option' && (args.length !== 2 || args[0] !== 'DNS' || !validIPv4(args[1]))) {
     throw new Error('Only explicit IPv4 DNS options are permitted.');
   }
-  if (name === 'route' && (args.length < 2 || args.length > 4 || !validIPv4(args[0]) || !validIPv4(args[1]))) {
-    throw new Error('Route directive is malformed.');
+  if (name === 'route') {
+    if (args.length < 2 || args.length > 4 || !validIPv4(args[0]) || !validIPv4(args[1])) {
+      throw new Error('Route directive is malformed.');
+    }
+    if (args[2] && args[2] !== 'vpn_gateway' && args[2] !== 'net_gateway' && !validIPv4(args[2])) {
+      throw new Error('Route gateway is invalid.');
+    }
+    if (args[3] && !/^\\d{1,5}$/.test(args[3])) throw new Error('Route metric is invalid.');
   }
   if (name === 'route-ipv6') throw new Error('IPv6 route directives are not enabled in this integration phase.');
   if (name === 'verb' && (args.length !== 1 || !/^[0-6]$/.test(args[0]))) throw new Error('Verb level is invalid.');
   if (name === 'key-direction' && (args.length !== 1 || !['0', '1'].includes(args[0]))) throw new Error('Key direction is invalid.');
+  if (['explicit-exit-notify', 'connect-retry-max', 'reneg-sec', 'tun-mtu', 'mssfix', 'ping', 'ping-restart'].includes(name) && (args.length !== 1 || !/^\\d{1,5}$/.test(args[0]))) throw new Error(`Invalid numeric value for ${name}.`);
+  if (name === 'connect-retry' && (args.length < 1 || args.length > 2 || args.some((value) => !/^\\d{1,5}$/.test(value)))) throw new Error('connect-retry value is invalid.');
   if (['cipher', 'data-ciphers', 'auth', 'tls-version-min'].includes(name) &&
       (args.length !== 1 || !/^[A-Za-z0-9:_-]{1,64}$/.test(args[0]))) {
     throw new Error(`Invalid value for ${name}.`);
@@ -108,6 +116,7 @@ export function validateOpenVPNProfile(source: string): ValidatedOpenVPNProfile 
   let activeBlock: string | null = null;
   let blockLines: string[] = [];
   let remote: ValidatedOpenVPNProfile['remote'] | null = null;
+  let selectedProtocol: 'udp' | 'tcp-client' = 'udp';
   let hasClient = false;
   let hasTun = false;
   let hasProto = false;
@@ -157,10 +166,11 @@ export function validateOpenVPNProfile(source: string): ValidatedOpenVPNProfile 
     if (name === 'dev') hasTun = true;
     if (name === 'proto') {
       hasProto = true;
-      remote = remote ? { ...remote, protocol: args[0] as 'udp' | 'tcp-client' } : null;
+      selectedProtocol = args[0] as 'udp' | 'tcp-client';
+      if (remote) remote = { ...remote, protocol: selectedProtocol };
     }
     if (name === 'remote') {
-      remote = { host: args[0], port: Number(args[1]), protocol: (args[2] || (directives.includes('proto') ? 'udp' : 'udp')) as 'udp' | 'tcp-client' };
+      remote = { host: args[0], port: Number(args[1]), protocol: (args[2] as 'udp' | 'tcp-client' | undefined) || selectedProtocol };
     }
   }
 
