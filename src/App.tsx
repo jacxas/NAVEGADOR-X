@@ -354,7 +354,7 @@ export default function App() {
   const handleInstantTranslate = async (overrideLang?: string) => {
     const langToUse = overrideLang || targetLang;
     const activeUrl = isBrowsing ? browsingUrl : url;
-    const isDesktopWebPage = isDesktopApp() && /^https?:\\/\\//i.test(activeUrl);
+    const isDesktopWebPage = isDesktopApp() && /^https?:/i.test(activeUrl);
 
     // En Electron, una URL web siempre se traduce en el DOM del webview.
     // No dependemos de `isBrowsing`: puede quedar desincronizado al navegar
