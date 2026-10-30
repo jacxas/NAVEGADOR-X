@@ -46,8 +46,9 @@ OLLAMA_MODEL=qwen2.5:7b
 GEMINI_API_KEY=
 ```
 
-The web client sends `mode: local` by default. Cloud and hybrid must be
-requested explicitly in the API payload. A hosted web server can only reach
+The web settings panel persists the selected mode in browser storage and sends
+it explicitly with each request. The default is `local`; cloud and hybrid are
+never selected implicitly. A hosted web server can only reach
 Ollama installed on that server; it cannot reach the visitor's desktop Ollama
 through the browser.
 
