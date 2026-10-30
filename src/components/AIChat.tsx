@@ -225,7 +225,7 @@ export function AIChat({ isFloating, onClose, currentUrl, onOpenXRay }: AIChatPr
 
     try {
       // Un único cliente decide dónde vive la clave: servidor Express (edición web)
-      // o proceso principal (edición de escritorio). Sin clave responde el motor local.
+      // o proceso principal (edición de escritorio). Ollama local es el modo predeterminado; si falla, no hay fallback cloud automático.
       const result = await aiQuery(textToSend, {
         systemInstruction: preferences?.systemPrompt || "Eres la IA contextual integrada en 'Navegador X'.",
       });
