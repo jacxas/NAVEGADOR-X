@@ -1,8 +1,8 @@
 /**
  * AiEngineSettings — configuración del motor de IA.
  *
- * Modo autónomo: la aplicación funciona sin ninguna clave y responde desde el
- * motor local. Si el usuario aporta una, Cortex AI pasa a usar Gemini.
+ * Ollama es el modo predeterminado. Cloud y fallback híbrido requieren selección
+ * explícita; el modo local nunca transmite prompts a Gemini.
  *
  * La clave nunca se guarda en el código ni en el repositorio: en la Edición de
  * Escritorio se almacena en el fichero de ajustes del usuario, y solo la lee el
@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { KeyRound, Check, AlertCircle, Cpu, Cloud, GitBranch } from 'lucide-react';
+import { KeyRound, Check, AlertCircle, Cpu } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { desktopBridge, isDesktopApp } from '@/src/lib/desktop';
 import { aiSetKey } from '@/src/lib/aiClient';
@@ -66,7 +66,7 @@ export function AiEngineSettings() {
       if (result) {
         setHasKey(result.hasKey);
         setModel(result.model);
-        setFeedback(result.hasKey ? 'Clave guardada: Cortex AI usará Gemini.' : 'No se pudo guardar la clave.');
+        setFeedback(result.hasKey ? 'Clave Gemini guardada. Solo se usará en modo Cloud o Híbrido.' : 'No se pudo guardar la clave.');
       }
       setDraft('');
     } catch (error: any) {
@@ -81,7 +81,7 @@ export function AiEngineSettings() {
     if (!bridge) return;
     const result = await bridge.ai.setKey('');
     setHasKey(Boolean(result?.hasKey));
-    setFeedback('Clave eliminada. El motor local volverá a responder.');
+    setFeedback('Clave Gemini eliminada. El modo local sigue disponible.');
   };
 
   if (!desktop) {
@@ -93,7 +93,7 @@ export function AiEngineSettings() {
           <p className="text-[10px] leading-relaxed text-gray-500">
             En la edición web la clave se configura en el servidor con la variable de entorno{' '}
             <code className="font-mono text-brand-cyan">GEMINI_API_KEY</code>. Sin ella, el servidor responde desde el
-            motor local.
+            Ollama local. Las consultas usan el modo local por defecto; para cloud o híbrido, selecciona el modo explícitamente en la configuración de escritorio.
           </p>
         </div>
       </div>
