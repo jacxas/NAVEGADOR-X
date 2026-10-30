@@ -48,6 +48,8 @@ const bridge = {
   ai: {
     hasKey: () => ipcRenderer.invoke('ai:has-key'),
     model: () => ipcRenderer.invoke('ai:model'),
+    mode: () => ipcRenderer.invoke('ai:mode'),
+    setMode: (mode: 'local' | 'cloud' | 'hybrid') => ipcRenderer.invoke('ai:set-mode', mode),
     setKey: (credencial: string, model?: string) => ipcRenderer.invoke('ai:set-key', credencial, model),
     query: (prompt: string, options?: { systemInstruction?: string; temperature?: number }) =>
       ipcRenderer.invoke('ai:query', prompt, options),
