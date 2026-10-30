@@ -97,7 +97,7 @@ export function validateAiQuery(body: unknown): ValidationResult<AiQueryInput> {
     systemInstruction = parsed;
   }
 
-  return { ok: true, value: { prompt, systemInstruction } };
+  const mode = input.mode === undefined ? 'local' : input.mode;\n  if (mode !== 'local' && mode !== 'cloud' && mode !== 'hybrid') {\n    return { ok: false, error: '«mode» debe ser local, cloud o hybrid.' };\n  }\n\n  return { ok: true, value: { prompt, systemInstruction, mode } };
 }
 
 export interface TranslateInput {
