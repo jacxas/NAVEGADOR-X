@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { KeyRound, Check, AlertCircle, Cpu } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { desktopBridge, isDesktopApp } from '@/src/lib/desktop';
-import { aiSetKey } from '@/src/lib/aiClient';
+import { aiGetMode, aiSetKey, aiSetMode } from '@/src/lib/aiClient';
 
 export function AiEngineSettings() {
   const desktop = isDesktopApp();
@@ -26,6 +26,7 @@ export function AiEngineSettings() {
   const [ollamaModel, setOllamaModel] = useState('qwen2.5:7b');
 
   useEffect(() => {
+    void aiGetMode().then(setMode);
     const bridge = desktopBridge();
     if (!bridge) return;
     void bridge.ai.hasKey().then(setHasKey);
@@ -35,17 +36,17 @@ export function AiEngineSettings() {
   }, []);
 
   const handleModeChange = async (nextMode: 'local' | 'cloud' | 'hybrid') => {
-    const bridge = desktopBridge();
-    if (!bridge) return;
-    setMode(nextMode);
-    const result = await bridge.ai.setMode(nextMode);
-    setFeedback(result.ok
-      ? nextMode === 'local'
+    try {
+      await aiSetMode(nextMode);
+      setMode(nextMode);
+      setFeedback(nextMode === 'local'
         ? 'Modo local: las consultas no se envían a la nube.'
         : nextMode === 'hybrid'
           ? 'Modo híbrido: Gemini solo se usa si Ollama local falla.'
-          : 'Modo cloud: las consultas se envían a Gemini.'
-      : result.reason || 'No se pudo guardar el modo.');
+          : 'Modo cloud: las consultas se envían a Gemini.');
+    } catch (error: any) {
+      setFeedback(error?.message || 'No se pudo guardar el modo.');
+    }
   };
 
   const handleSaveOllamaModel = async () => {
@@ -86,17 +87,23 @@ export function AiEngineSettings() {
 
   if (!desktop) {
     return (
-      <div className="space-y-2 rounded-xl border border-white/10 bg-[#141418] p-4">
-        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Motor de IA</p>
+      <div className="space-y-3 rounded-xl border border-white/10 bg-[#141418] p-4">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Motor de IA · Web Runtime</p>
+        <label className="block text-[9px] font-mono uppercase tracking-widest text-gray-500" htmlFor="ai-mode-web">Modo de enrutamiento</label>
+        <select id="ai-mode-web" value={mode} onChange={(event) => void handleModeChange(event.target.value as 'local' | 'cloud' | 'hybrid')} className="w-full rounded-lg border border-white/10 bg-[#0d0e12] px-2.5 py-2 text-[10px] text-gray-200 outline-none focus:border-brand-cyan/50">
+          <option value="local">Local — Ollama, sin fallback cloud</option>
+          <option value="hybrid">Híbrido — local primero, Gemini si falla</option>
+          <option value="cloud">Cloud — Gemini</option>
+        </select>
         <div className="flex items-start gap-2">
           <Cpu size={12} className="mt-0.5 shrink-0 text-brand-cyan" />
           <p className="text-[10px] leading-relaxed text-gray-500">
-            En la edición web, el servidor necesita Ollama en el mismo host (127.0.0.1:11434) y el modelo indicado por{' '}
-            <code className="font-mono text-brand-cyan">OLLAMA_MODEL</code>. Las consultas usan modo local por defecto y no
-            se envían a Gemini. Para habilitar Cloud o Hybrid, el cliente debe solicitarlo explícitamente y el servidor
-            debe tener <code className="font-mono text-brand-cyan">GEMINI_API_KEY</code>.
+            El servidor web necesita Ollama en el mismo host (127.0.0.1:11434) y el modelo indicado por{' '}
+            <code className="font-mono text-brand-cyan">OLLAMA_MODEL</code>. Cloud/Hybrid requieren{' '}
+            <code className="font-mono text-brand-cyan">GEMINI_API_KEY</code>. Un servidor alojado no puede acceder al Ollama de tu PC.
           </p>
         </div>
+        {feedback && <p className="text-[10px] text-gray-400">{feedback}</p>}
       </div>
     );
   }
