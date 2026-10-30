@@ -23,6 +23,10 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // Los humos de App renderizan la SPA completa con jsdom y userEvent: en
+    // máquinas lentas los 5 s por defecto se quedan cortos (verificado en
+    // Windows: 5,5 s por test; en el CI de Linux pasan con 5 s).
+    testTimeout: 30_000,
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}', 'server/**/*.test.ts', 'scripts/**/*.test.mjs'],
   },

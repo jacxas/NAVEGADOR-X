@@ -278,10 +278,12 @@ ${pageContent}`;
     }
   });
 
-  // Legacy/Internal Miner Stats
+  // Panel de minería: demostración de interfaz con cifras fijas.
+  // No hay minería real: `active: false` y `simulated: true` lo dejan claro.
   app.get("/api/miner/status", (req, res) => {
     res.json({
-      active: true,
+      active: false,
+      simulated: true,
       hashrate: 482.5,
       temp: 42,
       nodes: 12,
