@@ -6,11 +6,38 @@
  * - Web: se usan los endpoints `/api/v1/ai/*` del servidor Express, que aplican
  *   exactamente la misma política (clave en servidor y fallback local sin clave).
  *
- * Sin clave configurada, ambos entornos responden desde el motor local offline,
- * de modo que la aplicación nunca depende de un servicio externo para arrancar.
+ * Ollama local es la ruta predeterminada. Si no está disponible, la consulta falla
+ * sin enviar datos a la nube. Cloud e híbrido requieren selección explícita.
  */
 
 import { desktopBridge, isDesktopApp } from '@/src/lib/desktop';
+
+export type AiMode = 'local' | 'cloud' | 'hybrid';
+
+export async function aiGetMode(): Promise<AiMode> {
+  const bridge = desktopBridge();
+  if (bridge) return bridge.ai.mode();
+  try {
+    const stored = localStorage.getItem('navegadorx_ai_mode');
+    return stored === 'cloud' || stored === 'hybrid' ? stored : 'local';
+  } catch {
+    return 'local';
+  }
+}
+
+export async function aiSetMode(mode: AiMode): Promise<void> {
+  const bridge = desktopBridge();
+  if (bridge) {
+    const result = await bridge.ai.setMode(mode);
+    if (!result.ok) throw new Error(result.reason || 'No se pudo guardar el modo de IA.');
+    return;
+  }
+  try {
+    localStorage.setItem('navegadorx_ai_mode', mode);
+  } catch {
+    throw new Error('El navegador no permitió guardar la preferencia de modo de IA.');
+  }
+}
 
 export interface AiQueryResult {
   response: string;
@@ -29,24 +56,25 @@ export interface AiTranslationResult {
 
 export async function aiQuery(
   prompt: string,
-  options?: { systemInstruction?: string; temperature?: number },
+  options?: { systemInstruction?: string; temperature?: number; mode?: 'local' | 'cloud' | 'hybrid' },
 ): Promise<AiQueryResult> {
   const bridge = desktopBridge();
   if (bridge) {
     return bridge.ai.query(prompt, options);
   }
+  const mode = options?.mode || await aiGetMode();
 
   const response = await fetch('/api/v1/ai/query', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, model: 'default', systemInstruction: options?.systemInstruction }),
+    body: JSON.stringify({ prompt, systemInstruction: options?.systemInstruction, mode }),
   });
 
+  const data = await response.json().catch(() => ({} as Record<string, unknown>));
   if (!response.ok) {
-    throw new Error(`El servidor de IA respondió ${response.status}`);
+    const message = typeof data.error === 'string' ? data.error : `El servidor de IA respondió ${response.status}`;
+    throw new Error(message);
   }
-
-  const data = await response.json();
   const provider: string = data.provider || 'Desconocido';
   return {
     response: data.response || '',
@@ -59,16 +87,18 @@ export async function aiTranslate(
   url: string,
   targetLanguage: string,
   pageContent?: string,
+  mode?: 'local' | 'cloud' | 'hybrid',
 ): Promise<AiTranslationResult> {
   const bridge = desktopBridge();
   if (bridge) {
-    return bridge.ai.translate(url, targetLanguage, pageContent);
+    return bridge.ai.translate(url, targetLanguage, pageContent, mode);
   }
+  const selectedMode = mode || await aiGetMode();
 
   const response = await fetch('/api/v1/ai/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ url, targetLanguage, pageContent }),
+    body: JSON.stringify({ url, targetLanguage, pageContent, mode: selectedMode }),
   });
 
   const data = await response.json().catch(() => ({} as Record<string, unknown>));
@@ -87,7 +117,7 @@ export async function aiTranslate(
     provider,
     targetLanguage: data.targetLanguage || targetLanguage,
     url: data.url || url,
-    offline: /fallback|offline/i.test(provider),
+    offline: data.offline === true || /fallback|offline/i.test(provider),
   };
 }
 
@@ -98,14 +128,10 @@ export async function aiHasKey(): Promise<boolean> {
   // En web la clave vive en el servidor: si el endpoint responde sin proveedor
   // real, el propio servidor devolverá el motor local.
   try {
-    const response = await fetch('/api/v1/ai/query', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt: '__probe__' }),
-    });
+    const response = await fetch('/api/v1/ai/local-status', { method: 'GET' });
     if (!response.ok) return false;
     const data = await response.json();
-    return !/offline/i.test(data.provider || '');
+    return data.geminiConfigured === true;
   } catch {
     return false;
   }

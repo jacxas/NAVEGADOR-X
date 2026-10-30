@@ -35,12 +35,6 @@ const MODELS = [
   { id: 'gemini-3-flash-preview', name: 'X-Cortex v3', description: 'Modelo experimental de alta velocidad.' }
 ];
 
-const MOCK_TABS = [
-  { title: "Novedades en Criptografía", content: "Un análisis sobre los nuevos algoritmos post-cuánticos..." },
-  { title: "Dashboard Opera X", content: "Métricas del sistema y configuración de la capa de IA..." },
-  { title: "Minería Sustentable", content: "Cómo optimizar el uso de energía en dispositivos móviles..." }
-];
-
 interface Message {
   role: 'user' | 'assistant';
   content: string;
@@ -231,7 +225,7 @@ export function AIChat({ isFloating, onClose, currentUrl, onOpenXRay }: AIChatPr
 
     try {
       // Un único cliente decide dónde vive la clave: servidor Express (edición web)
-      // o proceso principal (edición de escritorio). Sin clave responde el motor local.
+      // o proceso principal (edición de escritorio). Ollama local es el modo predeterminado; si falla, no hay fallback cloud automático.
       const result = await aiQuery(textToSend, {
         systemInstruction: preferences?.systemPrompt || "Eres la IA contextual integrada en 'Navegador X'.",
       });
@@ -255,50 +249,36 @@ export function AIChat({ isFloating, onClose, currentUrl, onOpenXRay }: AIChatPr
 
   const handleSummarize = async () => {
     if (isLoading) return;
-    setIsLoading(true);
-    
-    const prompt = currentUrl 
-      ? `Resume el contenido de la pestaña actual: ${currentUrl}` 
-      : 'Resume mis pestañas abiertas.';
-      
+    const prompt = currentUrl
+      ? `Quiero resumir la pestaña ${currentUrl}, pero todavía no se te ha proporcionado su contenido. No inventes un resumen ni afirmes que visitaste el sitio. Indica que el navegador aún debe extraer y entregar el texto de la página para poder resumirla.`
+      : 'Quiero resumir mis pestañas abiertas, pero no se te ha proporcionado el contenido de ninguna. No inventes títulos ni resúmenes. Explica que hace falta extraer el contenido real de las pestañas.';
     setMessages(prev => [...prev, { role: 'user', content: prompt }]);
-    
-    setTimeout(() => {
-      let summary = "";
-      if (currentUrl) {
-        summary = `He analizado el contenido de ${currentUrl}. Es un sitio con alta densidad informativa. Resumen: Se trata de un análisis técnico sobre las tendencias de mercado en Q2, destacando el crecimiento del 14% en activos RWA y la consolidación de capas 2.`;
-      } else {
-        summary = `He analizado ${MOCK_TABS.length} pestañas activas. Los temas principales son criptografía post-cuántica y optimización energética en minería. ¿Deseas un desglose técnico de alguna de ellas?`;
-      }
-      setMessages(prev => [...prev, { role: 'assistant', content: summary }]);
+    setIsLoading(true);
+    try {
+      const result = await aiQuery(prompt, { systemInstruction: preferences?.systemPrompt });
+      setMessages(prev => [...prev, { role: 'assistant', content: result.response }]);
+    } catch (error: any) {
+      setMessages(prev => [...prev, { role: 'assistant', content: `No se pudo completar la solicitud: ${error?.message || String(error)}` }]);
+    } finally {
       setIsLoading(false);
-    }, 1500);
+    }
   };
 
   const handleSecurityAudit = async () => {
     if (isLoading) return;
-    setIsLoading(true);
-    
-    const prompt = currentUrl 
-      ? `Realiza una auditoría de seguridad del sitio actual: ${currentUrl}` 
-      : 'Analiza la seguridad de mis sesiones activas.';
-      
+    const prompt = currentUrl
+      ? `Prepara una auditoría de seguridad para ${currentUrl}. No afirmes haber inspeccionado el certificado, cabeceras, scripts, rastreadores ni tráfico porque no se te han entregado evidencias. Enumera exactamente qué datos técnicos debe recopilar Navegador X para hacer una auditoría real y separa hechos conocidos de comprobaciones pendientes.`
+      : 'Prepara una auditoría de seguridad del navegador. No inventes resultados de pestañas, certificados, cifrado ni nodos VPN. Indica qué evidencias reales debe recopilar la aplicación antes de emitir un diagnóstico.';
     setMessages(prev => [...prev, { role: 'user', content: prompt }]);
-    
-    setTimeout(() => {
-      let analysis = "";
-      if (currentUrl) {
-        analysis = `AUDITORÍA DE SEGURIDAD [${currentUrl}]: 
-- Certificado SSL: Válido (TLS 1.3)
-- Encabezados de Seguridad: HSTS detectable, CSP robusto.
-- Seguidores: 4 rastro bloqueados por Navegador X.
-- Reputación: Sitio verificado y seguro. Sin amenazas detectadas en la base de datos de Phishing.`;
-      } else {
-        analysis = `Análisis global de seguridad completado. Se han escaneado ${MOCK_TABS.length} pestañas. Todas las conexiones utilizan cifrado AES-256. No se detectan anomalías de tráfico saliente. El nodo VPN suizo está mitigando proactivamente 2 intentos de rastreo.`;
-      }
-      setMessages(prev => [...prev, { role: 'assistant', content: analysis }]);
+    setIsLoading(true);
+    try {
+      const result = await aiQuery(prompt, { systemInstruction: preferences?.systemPrompt });
+      setMessages(prev => [...prev, { role: 'assistant', content: result.response }]);
+    } catch (error: any) {
+      setMessages(prev => [...prev, { role: 'assistant', content: `No se pudo completar la solicitud: ${error?.message || String(error)}` }]);
+    } finally {
       setIsLoading(false);
-    }, 2000);
+    }
   };
 
   const handleUpdatePersona = async (persona: typeof PERSONAS[0]) => {

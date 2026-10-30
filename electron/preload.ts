@@ -48,11 +48,15 @@ const bridge = {
   ai: {
     hasKey: () => ipcRenderer.invoke('ai:has-key'),
     model: () => ipcRenderer.invoke('ai:model'),
+    mode: () => ipcRenderer.invoke('ai:mode'),
+    ollamaModel: () => ipcRenderer.invoke('ai:ollama-model'),
+    setOllamaModel: (model: string) => ipcRenderer.invoke('ai:set-ollama-model', model),
+    setMode: (mode: 'local' | 'cloud' | 'hybrid') => ipcRenderer.invoke('ai:set-mode', mode),
     setKey: (credencial: string, model?: string) => ipcRenderer.invoke('ai:set-key', credencial, model),
-    query: (prompt: string, options?: { systemInstruction?: string; temperature?: number }) =>
+    query: (prompt: string, options?: { systemInstruction?: string; temperature?: number; mode?: 'local' | 'cloud' | 'hybrid' }) =>
       ipcRenderer.invoke('ai:query', prompt, options),
-    translate: (url: string, targetLanguage: string, pageContent?: string) =>
-      ipcRenderer.invoke('ai:translate', url, targetLanguage, pageContent),
+    translate: (url: string, targetLanguage: string, pageContent?: string, mode?: 'local' | 'cloud' | 'hybrid') =>
+      ipcRenderer.invoke('ai:translate', url, targetLanguage, pageContent, mode),
   },
 
   downloads: {

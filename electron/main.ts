@@ -10,8 +10,8 @@
  *  - Los <webview> de contenido remoto se endurecen en `will-attach-webview`.
  *  - La SPA se sirve por el esquema propio `app://bundle` (origen estándar y seguro),
  *    de modo que localStorage, IndexedDB y Firebase funcionan igual que en la web.
- *  - Modo autónomo: sin GEMINI_API_KEY la app arranca y funciona igual; el motor
- *    de IA cae a un modo local sin red.
+ *  - IA local-first: Ollama corre en loopback; Gemini solo se usa en modos cloud
+ *    o hybrid seleccionados explícitamente por el usuario.
  */
 
 import {
@@ -81,6 +81,8 @@ interface ShellSettings {
   /** Clave cifrada con el almacén del sistema (base64). */
   geminiSecretEnc?: string;
   geminiModel?: string;
+  aiMode?: 'local' | 'cloud' | 'hybrid';
+  ollamaModel?: string;
 }
 
 function readSettings(): ShellSettings {
@@ -161,6 +163,19 @@ function geminiModel(): string {
   return readSettings().geminiModel || DEFAULT_GEMINI_MODEL;
 }
 
+type AiMode = 'local' | 'cloud' | 'hybrid';
+
+function configuredAiMode(): AiMode {
+  const mode = readSettings().aiMode;
+  return mode === 'cloud' || mode === 'hybrid' ? mode : 'local';
+}
+
+function configuredOllamaModel(): string {
+  const model = (readSettings().ollamaModel || process.env.OLLAMA_MODEL || 'qwen2.5:7b').trim();
+  if (!/^[a-zA-Z0-9._:-]{1,128}$/.test(model)) throw new Error('El nombre del modelo Ollama no es válido.');
+  return model;
+}
+
 function isSafeExternalUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
@@ -215,16 +230,37 @@ interface AiResult {
   offline: boolean;
 }
 
-function offlineReply(prompt: string): AiResult {
-  return {
-    response:
-      `[Motor local sin conexión] No hay ninguna clave de Gemini configurada, así que respondo desde el motor local.\n\n` +
-      `Tu consulta fue: "${prompt}"\n\n` +
-      `Para habilitar las respuestas reales de Cortex AI abre el panel de IA y guarda una GEMINI_API_KEY, ` +
-      `o define la variable de entorno GEMINI_API_KEY antes de arrancar la aplicación.`,
-    provider: 'Local Offline Engine',
-    offline: true,
-  };
+async function callOllamaDesktop(
+  prompt: string,
+  options: { systemInstruction?: string; temperature?: number } = {},
+): Promise<AiResult> {
+  if (!prompt.trim() || prompt.length > 8_000) throw new Error('La consulta está vacía o supera 8000 caracteres.');
+  const model = configuredOllamaModel();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  try {
+    const response = await fetch('http://127.0.0.1:11434/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model,
+        stream: false,
+        messages: [
+          ...(options.systemInstruction ? [{ role: 'system', content: options.systemInstruction }] : []),
+          { role: 'user', content: prompt },
+        ],
+        options: { temperature: options.temperature ?? 0.7 },
+      }),
+    });
+    if (!response.ok) throw new Error(`Ollama respondió HTTP ${response.status}.`);
+    const payload = await response.json() as { message?: { content?: unknown } };
+    const answer = payload?.message?.content;
+    if (typeof answer !== 'string' || !answer.trim()) throw new Error('Ollama devolvió una respuesta vacía.');
+    return { response: answer, provider: `Ollama (${model})`, offline: true };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function callGemini(
@@ -232,7 +268,7 @@ async function callGemini(
   options: { systemInstruction?: string; temperature?: number } = {},
 ): Promise<AiResult> {
   const credencial = geminiApiKey();
-  if (!credencial) return offlineReply(contents);
+  if (!credencial) throw new Error('Gemini no está configurado. Selecciona modo local o configura una clave para usar cloud.');
 
   const model = geminiModel();
 
@@ -280,13 +316,7 @@ async function callGemini(
     };
   } catch (error: any) {
     console.error('[NavegadorX] Error al consultar Gemini:', error);
-    return {
-      response:
-        `[Error del motor de IA] ${error?.message || String(error)}\n\n` +
-        `La aplicación sigue funcionando en modo autónomo; revisa tu clave o tu conexión.`,
-      provider: 'Local Offline Engine',
-      offline: true,
-    };
+    throw new Error(`Gemini no respondió correctamente: ${error?.message || String(error)}`);
   } finally {
     clearTimeout(timeout);
   }
@@ -979,6 +1009,27 @@ function registerIpcHandlers(): void {
   // IA — disponible desde el proceso principal, sin exponer la clave al renderer.
   ipcMain.handle('ai:has-key', () => Boolean(geminiApiKey()));
   ipcMain.handle('ai:model', () => geminiModel());
+  ipcMain.handle('ai:mode', () => configuredAiMode());
+  ipcMain.handle('ai:ollama-model', () => configuredOllamaModel());
+  ipcMain.handle('ai:set-ollama-model', (_event, model: string) => {
+    const value = typeof model === 'string' ? model.trim() : '';
+    if (!/^[a-zA-Z0-9._:-]{1,128}$/.test(value)) {
+      return { ok: false, model: configuredOllamaModel(), reason: 'Nombre de modelo Ollama no válido.' };
+    }
+    const settings = readSettings();
+    settings.ollamaModel = value;
+    writeSettings(settings);
+    return { ok: true, model: value };
+  });
+  ipcMain.handle('ai:set-mode', (_event, mode: AiMode) => {
+    if (mode !== 'local' && mode !== 'cloud' && mode !== 'hybrid') {
+      return { ok: false, mode: configuredAiMode(), reason: 'Modo de IA no válido.' };
+    }
+    const settings = readSettings();
+    settings.aiMode = mode;
+    writeSettings(settings);
+    return { ok: true, mode };
+  });
   ipcMain.handle('ai:set-key', (_event, credencial: string, model?: string) => {
     const settings = readSettings();
     if (typeof credencial === 'string') {
@@ -1008,25 +1059,60 @@ function registerIpcHandlers(): void {
   });
   ipcMain.handle(
     'ai:query',
-    async (_event, prompt: string, options?: { systemInstruction?: string; temperature?: number }) => {
+    async (_event, prompt: string, options?: { systemInstruction?: string; temperature?: number; mode?: AiMode }) => {
       const systemInstruction =
         options?.systemInstruction ||
         "Eres la IA contextual e integrada del microkernel 'X Runtime OS' / 'Navegador X'. Responde de forma concisa y profesional.";
+      const mode = options?.mode || configuredAiMode();
+
+      if (mode === 'local' || mode === 'hybrid') {
+        try {
+          return await callOllamaDesktop(prompt, { systemInstruction, temperature: options?.temperature });
+        } catch (error) {
+          if (mode === 'local') {
+            throw new Error('Ollama no está disponible. No se enviaron datos a la nube. Instala/inicia Ollama y descarga el modelo configurado.');
+          }
+          console.warn('[NavegadorX] Ollama no disponible; se usa Gemini por modo híbrido explícito.', error);
+        }
+      }
+
       return callGemini(prompt, { systemInstruction, temperature: options?.temperature });
     },
   );
-  ipcMain.handle('ai:translate', async (_event, url: string, targetLanguage: string, pageContent?: string) => {
+  ipcMain.handle('ai:translate', async (
+    _event,
+    url: string,
+    targetLanguage: string,
+    pageContent?: string,
+    requestedMode?: AiMode,
+  ) => {
+    if (typeof pageContent !== 'string' || !pageContent.trim()) {
+      throw new Error('No se recibió el contenido de la página. No se puede traducir solo a partir de una URL.');
+    }
     const prompt =
-      `Eres el traductor instantáneo inteligente integrado en el navegador 'Navegador X'.\n\n` +
-      `Traducción requerida:\n- URL del sitio web: ${url || 'Pestaña Activa de Navegador X'}\n` +
-      `- Idioma de destino: ${targetLanguage}\n` +
-      `${pageContent ? `- Contenido extraído del sitio:\n${pageContent}` : ''}\n\n` +
-      `Responde en Markdown con:\n1. **Resumen de la Página**\n2. **Titular Traducido**\n` +
-      `3. **Contenido Principal Traducido**\n4. **Highlights / Menú de Navegación Traducido**`;
+      `Traduce fielmente el siguiente contenido al idioma "${targetLanguage}".\\n` +
+      `No inventes información ni agregues contenido que no aparezca en el original.\\n` +
+      `URL de origen: ${url || 'Pestaña activa'}\\n\\nCONTENIDO:\\n${pageContent}`;
+    const systemInstruction = 'Eres un traductor profesional. Conserva el significado, formato y nombres propios.';
+    const mode = requestedMode || configuredAiMode();
 
-    const result = await callGemini(prompt, { temperature: 0.3 });
+    let result: AiResult;
+    if (mode === 'local' || mode === 'hybrid') {
+      try {
+        result = await callOllamaDesktop(prompt, { systemInstruction, temperature: 0.3 });
+      } catch (error) {
+        if (mode === 'local') {
+          throw new Error('Ollama no está disponible. No se envió el contenido a la nube.');
+        }
+        console.warn('[NavegadorX] Ollama translation unavailable; explicit hybrid fallback.', error);
+        result = await callGemini(prompt, { systemInstruction, temperature: 0.3 });
+      }
+    } else {
+      result = await callGemini(prompt, { systemInstruction, temperature: 0.3 });
+    }
+
     return {
-      success: !result.offline,
+      success: true,
       translatedContent: result.response,
       provider: result.provider,
       targetLanguage,

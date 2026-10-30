@@ -1,185 +1,189 @@
-import { useState, useEffect } from 'react';
-import { Shield, Globe, Lock, Loader2, MapPin, Signal, Activity, Zap } from 'lucide-react';
-import { motion } from 'motion/react';
-import { cn } from '@/src/lib/utils';
-import { SimulationNotice } from './SimulationNotice';
+import { useEffect, useState } from 'react';
+import { AlertCircle, Globe, Loader2, MapPin, RefreshCw, Shield } from 'lucide-react';
 import { NetworkPanel } from './NetworkPanel';
-
-interface Node {
-  id: string;
-  name: string;
-  country: string;
-  latency: number;
-  status: 'online' | 'busy' | 'offline';
-  load: number;
-  protocols: string[];
-  type?: 'free' | 'premium';
-}
-
-import { ConnectionPanel } from './ConnectionPanel';
 import { ConnectionStatus } from './ConnectionStatus';
 
+interface VPNGateServer {
+  id: string;
+  hostName: string;
+  ip: string;
+  country: string;
+  countryCode: string;
+  pingMs: number | null;
+  speedBytesPerSecond: number | null;
+  activeSessions: number | null;
+  loggingPolicy: 'no-log-claim' | 'some-logs' | 'unknown';
+  protocol: 'OpenVPN';
+}
+
+interface VPNGateResponse {
+  servers: VPNGateServer[];
+  fetchedAt: number;
+  cached: boolean;
+}
+
+const formatSpeed = (bytesPerSecond: number | null) => {
+  if (bytesPerSecond === null) return '—';
+  const mbps = (bytesPerSecond * 8) / 1_000_000;
+  return mbps >= 1000 ? `${(mbps / 1000).toFixed(2)} Gbps` : `${mbps.toFixed(1)} Mbps`;
+};
+
+const loggingLabel = (policy: VPNGateServer['loggingPolicy']) => {
+  if (policy === 'no-log-claim') return 'El servidor declara no guardar logs';
+  if (policy === 'some-logs') return 'Declara conservar algunos registros';
+  return 'Política no verificada';
+};
+
 export function VPNDashboard() {
-  const [isConnected, setIsConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [selectedNode, setSelectedNode] = useState('zh-01');
-  const [nodes, setNodes] = useState<Node[]>([]);
+  const [servers, setServers] = useState<VPNGateServer[]>([]);
+  const [selectedId, setSelectedId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [fetchedAt, setFetchedAt] = useState<number | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    fetch('/api/v1/vpn/servers')
-      .then(res => {
-        const ct = res.headers.get('content-type');
-        if (res.ok && ct && ct.includes('application/json')) {
-          return res.json();
-        }
-        throw new Error("Formato no válido o servidor no disponible");
-      })
-      .then(data => {
-        if (Array.isArray(data) && data.length > 0) {
-          setNodes(data);
-        } else {
-          throw new Error("Datos de nodos vacíos");
-        }
-        setIsLoading(false);
-      })
-      .catch(() => {
-        setNodes([
-          { id: 'zh-01', name: 'Zurich Secure 01', country: 'Suiza', latency: 12, status: 'online', load: 34, protocols: ['WireGuard', 'OpenVPN'], type: 'premium' },
-          { id: 'is-01', name: 'Reykjavik Vault', country: 'Islandia', latency: 45, status: 'online', load: 18, protocols: ['WireGuard'], type: 'premium' },
-          { id: 'sg-01', name: 'Singapore Cyber', country: 'Singapur', latency: 120, status: 'online', load: 62, protocols: ['WireGuard', 'Tor'], type: 'free' },
-          { id: 'nl-01', name: 'Amsterdam Freedom', country: 'Países Bajos', latency: 28, status: 'online', load: 45, protocols: ['WireGuard'], type: 'free' }
-        ]);
-        setIsLoading(false);
-      });
-  }, []);
+    const controller = new AbortController();
+    setIsLoading(true);
+    setError('');
 
-  const selectedNodeData = nodes.find(n => n.id === selectedNode);
+    fetch('/api/v1/vpn/servers', { signal: controller.signal })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(payload?.error || `No se pudo consultar VPN Gate (HTTP ${response.status}).`);
+        }
+        if (!payload || !Array.isArray(payload.servers)) {
+          throw new Error('La respuesta del catálogo VPN Gate no tiene el formato esperado.');
+        }
+        return payload as VPNGateResponse;
+      })
+      .then((payload) => {
+        setServers(payload.servers);
+        setFetchedAt(payload.fetchedAt);
+        setSelectedId((current) =>
+          payload.servers.some((server) => server.id === current)
+            ? current
+            : payload.servers[0]?.id || '',
+        );
+      })
+      .catch((cause: unknown) => {
+        if (cause instanceof Error && cause.name === 'AbortError') return;
+        setServers([]);
+        setError(cause instanceof Error ? cause.message : 'Error desconocido consultando VPN Gate.');
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setIsLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [refreshKey]);
+
+  const selected = servers.find((server) => server.id === selectedId);
 
   return (
-    <div className="p-10 max-w-6xl mx-auto grid grid-cols-12 gap-8">
-      {/* Estado real de la conexión: qué hace el programa con tu red y qué no. */}
+    <div className="p-6 md:p-10 max-w-6xl mx-auto grid grid-cols-12 gap-8">
       <div className="col-span-12">
         <ConnectionStatus />
       </div>
 
-      {/* Configuración de red real: esto sí afecta a tu conexión */}
       <div className="col-span-12">
         <NetworkPanel />
       </div>
 
-      <div className="col-span-12">
-        <SimulationNotice module="VPN X (lista de nodos)">
-          Esa lista es decorativa: esos servidores no existen y no puedes conectarte a ellos. Para enrutar tu tráfico de
-          verdad, usa el panel de red de arriba con un servidor de tu confianza.
-        </SimulationNotice>
-      </div>
+      <section className="col-span-12 card p-6 md:p-8">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+          <div>
+            <div className="flex items-center gap-2">
+              <Globe size={16} className="text-brand-cyan" />
+              <h2 className="panel-header !mb-0">VPN Gate · servidores públicos</h2>
+            </div>
+            <p className="mt-2 text-xs text-gray-500">
+              Catálogo dinámico de relays voluntarios. Protocolo disponible: OpenVPN.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRefreshKey((value) => value + 1)}
+            disabled={isLoading}
+            className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs text-gray-300 hover:bg-white/5 disabled:opacity-50"
+          >
+            {isLoading ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+            Actualizar catálogo
+          </button>
+        </div>
 
-      {/* Connection Status Card */}
-      <div className="col-span-12 md:col-span-4 space-y-6">
-        {selectedNodeData ? (
-          <ConnectionPanel 
-            server={selectedNodeData} 
-            onConnect={(id, proto) => {
-              setIsConnecting(true);
-              setTimeout(() => {
-                setIsConnecting(false);
-                setIsConnected(true);
-              }, 1500);
-            }}
-            onDisconnect={() => setIsConnected(false)}
-            onProtocolChange={(proto) => console.log("Protocol:", proto)}
-          />
-        ) : (
-          <div className="card p-8 text-center text-gray-600 italic text-xs">
-            Selecciona un nodo para configurar la conexión
+        {error && (
+          <div role="alert" className="mb-5 flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs text-amber-200">
+            <AlertCircle size={15} className="mt-0.5 shrink-0" />
+            <div>
+              <p className="font-semibold">VPN Gate no está disponible</p>
+              <p className="mt-1 text-amber-200/70">{error}</p>
+              <p className="mt-2 text-amber-200/60">No se muestran servidores inventados ni se ha iniciado una conexión VPN.</p>
+            </div>
           </div>
         )}
 
-        <div className="card p-6 bg-brand-magenta/5 border-brand-magenta/10">
-           <div className="flex items-center gap-3 mb-4">
-             <Shield size={16} className="text-brand-magenta" />
-             <span className="text-[10px] font-bold uppercase tracking-widest text-brand-magenta">Seguridad Avanzada</span>
-           </div>
-           <p className="text-[10px] text-gray-500 leading-relaxed font-mono">
-             Cifrado post-cuántico activo. Protocolo X-Layer v2 detectado.
-           </p>
-        </div>
-      </div>
-
-      {/* Nodes and Stats */}
-      <div className="col-span-12 md:col-span-8 space-y-8">
-        <div className="card p-8 relative overflow-hidden">
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="panel-header !mb-0">Global Network Status</h2>
-            <div className="flex items-center gap-2">
-               <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/5 border border-white/5 text-[8px] font-bold uppercase tracking-widest text-gray-400">
-                 Free
-               </span>
-               <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-brand-magenta/10 border border-brand-magenta/20 text-[8px] font-bold uppercase tracking-widest text-brand-magenta">
-                 <Zap size={8} /> Premium
-               </span>
+        {isLoading ? (
+          <div className="flex items-center justify-center gap-3 py-12 text-xs text-gray-500">
+            <Loader2 size={16} className="animate-spin" /> Consultando el catálogo oficial…
+          </div>
+        ) : servers.length === 0 && !error ? (
+          <div className="py-12 text-center text-xs text-gray-500">VPN Gate no devolvió servidores OpenVPN válidos.</div>
+        ) : servers.length > 0 ? (
+          <>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono uppercase tracking-wider text-gray-500">
+              <span>{servers.length} servidores válidos recibidos</span>
+              {fetchedAt && <span>Actualizado: {new Date(fetchedAt).toLocaleString()}</span>}
             </div>
-          </div>
-          
-          <div className="grid grid-cols-1 gap-1">
-             {isLoading ? (
-               <div className="flex items-center justify-center p-8 text-gray-600 animate-pulse text-xs font-mono">
-                 Sincronizando nodos de red...
-               </div>
-             ) : (
-               nodes.map((node) => (
-                 <button
-                   key={node.id}
-                   onClick={() => setSelectedNode(node.id)}
-                   className={cn(
-                     "flex items-center justify-between p-3 rounded-xl border border-transparent transition-all",
-                     selectedNode === node.id 
-                      ? "bg-[#141418] border-white/10" 
-                      : "hover:bg-white/[0.02]"
-                   )}
-                 >
-                   <div className="flex items-center gap-4">
-                     <MapPin size={14} className={selectedNode === node.id ? "text-brand-cyan" : "text-gray-600"} />
-                     <div className="text-left flex items-center gap-3">
-                        <div>
-                          <div className="text-xs font-bold">{node.name}</div>
-                          <div className="text-[9px] uppercase tracking-widest text-gray-500 font-mono">{node.country}</div>
-                        </div>
-                        {node.type === 'premium' && (
-                          <span className="text-[7px] px-1.5 py-0.5 rounded-sm bg-brand-magenta/20 text-brand-magenta font-bold uppercase tracking-widest">PRO</span>
-                        )}
-                     </div>
-                   </div>
+            <div className="max-h-[480px] space-y-1 overflow-y-auto pr-1">
+              {servers.map((server) => (
+                <button
+                  type="button"
+                  key={server.id}
+                  onClick={() => setSelectedId(server.id)}
+                  className={`flex w-full items-center justify-between gap-4 rounded-xl border p-3 text-left transition-colors ${
+                    selectedId === server.id
+                      ? 'border-brand-cyan/30 bg-brand-cyan/5'
+                      : 'border-transparent hover:border-white/10 hover:bg-white/[0.02]'
+                  }`}
+                >
+                  <span className="flex min-w-0 items-center gap-3">
+                    <MapPin size={14} className="shrink-0 text-gray-500" />
+                    <span className="min-w-0">
+                      <span className="block truncate text-xs font-semibold text-gray-200">{server.country} · {server.hostName}</span>
+                      <span className="mt-1 block text-[10px] font-mono text-gray-500">{server.ip} · {server.countryCode}</span>
+                    </span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-4 text-[10px] font-mono text-gray-400">
+                    <span>{server.pingMs === null ? '—' : `${server.pingMs} ms`}</span>
+                    <span>{formatSpeed(server.speedBytesPerSecond)}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
+      </section>
 
-                   <div className="flex items-center gap-6">
-                      <div className="text-[10px] font-mono text-gray-500">{node.latency}ms</div>
-                      <div className={cn(
-                        "h-1.5 w-1.5 rounded-full",
-                        node.status === 'online' ? "bg-brand-cyan shadow-[0_0_8px_rgba(0,255,255,0.5)]" : "bg-yellow-500"
-                      )} />
-                   </div>
-                 </button>
-               ))
-             )}
+      {selected && (
+        <section className="col-span-12 card p-6">
+          <div className="mb-4 flex items-center gap-2">
+            <Shield size={15} className="text-brand-cyan" />
+            <h3 className="text-xs font-bold uppercase tracking-widest text-gray-300">Servidor seleccionado · solo información</h3>
           </div>
-        </div>
-
-        <div className="grid grid-cols-3 gap-6 text-center">
-           <div className="card p-6">
-             <div className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-2">Tráfico</div>
-             <div className="text-lg font-bold font-mono">1.2 GB</div>
-           </div>
-           <div className="card p-6">
-             <div className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-2">Velocidad</div>
-             <div className="text-lg font-bold font-mono text-brand-cyan">980 Mbps</div>
-           </div>
-           <div className="card p-6">
-             <div className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-2">Leaks</div>
-             <div className="text-lg font-bold font-mono text-brand-magenta">0</div>
-           </div>
-        </div>
-      </div>
+          <div className="grid gap-4 text-xs sm:grid-cols-2 lg:grid-cols-4">
+            <div><p className="text-gray-500">Protocolo</p><p className="mt-1 text-gray-200">{selected.protocol}</p></div>
+            <div><p className="text-gray-500">Sesiones reportadas</p><p className="mt-1 text-gray-200">{selected.activeSessions ?? 'Sin dato'}</p></div>
+            <div><p className="text-gray-500">Velocidad anunciada</p><p className="mt-1 text-gray-200">{formatSpeed(selected.speedBytesPerSecond)}</p></div>
+            <div><p className="text-gray-500">Política declarada</p><p className="mt-1 text-gray-200">{loggingLabel(selected.loggingPolicy)}</p></div>
+          </div>
+          <p className="mt-5 border-t border-white/5 pt-4 text-[10px] leading-relaxed text-amber-300/70">
+            La selección no conecta el equipo. Los servidores son operados por voluntarios y sus políticas pueden variar.
+            La conexión nativa OpenVPN se habilitará en una fase posterior, después de validar perfiles y el proceso del sistema.
+          </p>
+        </section>
+      )}
     </div>
   );
 }

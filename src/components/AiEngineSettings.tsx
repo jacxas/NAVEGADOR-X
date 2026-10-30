@@ -1,8 +1,8 @@
 /**
  * AiEngineSettings — configuración del motor de IA.
  *
- * Modo autónomo: la aplicación funciona sin ninguna clave y responde desde el
- * motor local. Si el usuario aporta una, Cortex AI pasa a usar Gemini.
+ * Ollama es el modo predeterminado. Cloud y fallback híbrido requieren selección
+ * explícita; el modo local nunca transmite prompts a Gemini.
  *
  * La clave nunca se guarda en el código ni en el repositorio: en la Edición de
  * Escritorio se almacena en el fichero de ajustes del usuario, y solo la lee el
@@ -13,7 +13,7 @@ import { useEffect, useState } from 'react';
 import { KeyRound, Check, AlertCircle, Cpu } from 'lucide-react';
 import { cn } from '@/src/lib/utils';
 import { desktopBridge, isDesktopApp } from '@/src/lib/desktop';
-import { aiSetKey } from '@/src/lib/aiClient';
+import { aiGetMode, aiSetKey, aiSetMode } from '@/src/lib/aiClient';
 
 export function AiEngineSettings() {
   const desktop = isDesktopApp();
@@ -22,13 +22,39 @@ export function AiEngineSettings() {
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [mode, setMode] = useState<'local' | 'cloud' | 'hybrid'>('local');
+  const [ollamaModel, setOllamaModel] = useState('qwen2.5:7b');
 
   useEffect(() => {
+    void aiGetMode().then(setMode);
     const bridge = desktopBridge();
     if (!bridge) return;
     void bridge.ai.hasKey().then(setHasKey);
     void bridge.ai.model().then(setModel);
+    void bridge.ai.mode().then(setMode);
+    void bridge.ai.ollamaModel().then(setOllamaModel);
   }, []);
+
+  const handleModeChange = async (nextMode: 'local' | 'cloud' | 'hybrid') => {
+    try {
+      await aiSetMode(nextMode);
+      setMode(nextMode);
+      setFeedback(nextMode === 'local'
+        ? 'Modo local: las consultas no se envían a la nube.'
+        : nextMode === 'hybrid'
+          ? 'Modo híbrido: Gemini solo se usa si Ollama local falla.'
+          : 'Modo cloud: las consultas se envían a Gemini.');
+    } catch (error: any) {
+      setFeedback(error?.message || 'No se pudo guardar el modo.');
+    }
+  };
+
+  const handleSaveOllamaModel = async () => {
+    const bridge = desktopBridge();
+    if (!bridge) return;
+    const result = await bridge.ai.setOllamaModel(ollamaModel);
+    setFeedback(result.ok ? `Modelo local configurado: ${result.model}` : result.reason || 'Modelo no válido.');
+  };
 
   const handleSave = async () => {
     const bridge = desktopBridge();
@@ -41,7 +67,7 @@ export function AiEngineSettings() {
       if (result) {
         setHasKey(result.hasKey);
         setModel(result.model);
-        setFeedback(result.hasKey ? 'Clave guardada: Cortex AI usará Gemini.' : 'No se pudo guardar la clave.');
+        setFeedback(result.hasKey ? 'Clave Gemini guardada. Solo se usará en modo Cloud o Híbrido.' : 'No se pudo guardar la clave.');
       }
       setDraft('');
     } catch (error: any) {
@@ -56,21 +82,28 @@ export function AiEngineSettings() {
     if (!bridge) return;
     const result = await bridge.ai.setKey('');
     setHasKey(Boolean(result?.hasKey));
-    setFeedback('Clave eliminada. El motor local volverá a responder.');
+    setFeedback('Clave Gemini eliminada. El modo local sigue disponible.');
   };
 
   if (!desktop) {
     return (
-      <div className="space-y-2 rounded-xl border border-white/10 bg-[#141418] p-4">
-        <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gray-400">Motor de IA</p>
+      <div className="space-y-3 rounded-xl border border-white/10 bg-[#141418] p-4">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-400">Motor de IA · Web Runtime</p>
+        <label className="block text-[9px] font-mono uppercase tracking-widest text-gray-500" htmlFor="ai-mode-web">Modo de enrutamiento</label>
+        <select id="ai-mode-web" value={mode} onChange={(event) => void handleModeChange(event.target.value as 'local' | 'cloud' | 'hybrid')} className="w-full rounded-lg border border-white/10 bg-[#0d0e12] px-2.5 py-2 text-[10px] text-gray-200 outline-none focus:border-brand-cyan/50">
+          <option value="local">Local — Ollama, sin fallback cloud</option>
+          <option value="hybrid">Híbrido — local primero, Gemini si falla</option>
+          <option value="cloud">Cloud — Gemini</option>
+        </select>
         <div className="flex items-start gap-2">
           <Cpu size={12} className="mt-0.5 shrink-0 text-brand-cyan" />
           <p className="text-[10px] leading-relaxed text-gray-500">
-            En la edición web la clave se configura en el servidor con la variable de entorno{' '}
-            <code className="font-mono text-brand-cyan">GEMINI_API_KEY</code>. Sin ella, el servidor responde desde el
-            motor local.
+            El servidor web necesita Ollama en el mismo host (127.0.0.1:11434) y el modelo indicado por{' '}
+            <code className="font-mono text-brand-cyan">OLLAMA_MODEL</code>. Cloud/Hybrid requieren{' '}
+            <code className="font-mono text-brand-cyan">GEMINI_API_KEY</code>. Un servidor alojado no puede acceder al Ollama de tu PC.
           </p>
         </div>
+        {feedback && <p className="text-[10px] text-gray-400">{feedback}</p>}
       </div>
     );
   }
@@ -85,22 +118,39 @@ export function AiEngineSettings() {
             hasKey ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-400' : 'border-amber-500/40 bg-amber-500/10 text-amber-400',
           )}
         >
-          {hasKey === null ? 'Comprobando' : hasKey ? 'Gemini activo' : 'Motor local'}
+          {mode === 'local' ? 'Solo local' : mode === 'hybrid' ? 'Híbrido explícito' : hasKey ? 'Cloud disponible' : 'Cloud sin clave'}
         </span>
       </div>
 
       <div className="flex items-start gap-2">
         {hasKey ? <Check size={12} className="mt-0.5 shrink-0 text-emerald-400" /> : <Cpu size={12} className="mt-0.5 shrink-0 text-brand-cyan" />}
         <p className="text-[10px] leading-relaxed text-gray-500">
-          {hasKey
-            ? 'Las respuestas de Cortex AI y la traducción instantánea se generan con Gemini.'
-            : 'Sin clave la aplicación funciona igual: responde desde el motor local, sin red.'}
+          {mode === 'local'
+            ? 'Las consultas se procesan con Ollama en este equipo. Si Ollama no está disponible, la petición falla y no se envía a la nube.'
+            : mode === 'hybrid'
+              ? 'Primero se intenta Ollama. Solo si falla se envía la consulta a Gemini, porque elegiste explícitamente el modo híbrido.'
+              : 'Las consultas se envían a Gemini. Comprueba que haya una clave configurada.'}
         </p>
       </div>
 
       <div className="space-y-2">
+        <div className="space-y-2 rounded-lg border border-white/5 bg-[#0d0e12] p-3">
+          <label className="block text-[9px] font-mono uppercase tracking-widest text-gray-500" htmlFor="ai-mode">Modo de enrutamiento</label>
+          <select id="ai-mode" value={mode} onChange={(event) => void handleModeChange(event.target.value as 'local' | 'cloud' | 'hybrid')} className="w-full rounded-lg border border-white/10 bg-[#141418] px-2.5 py-2 text-[10px] text-gray-200 outline-none focus:border-brand-cyan/50">
+            <option value="local">Local — Ollama, sin fallback cloud</option>
+            <option value="hybrid">Híbrido — local primero, Gemini si falla</option>
+            <option value="cloud">Cloud — Gemini</option>
+          </select>
+          <label className="block text-[9px] font-mono uppercase tracking-widest text-gray-500" htmlFor="ollama-model">Modelo Ollama local</label>
+          <div className="flex gap-2">
+            <input id="ollama-model" type="text" value={ollamaModel} onChange={(event) => setOllamaModel(event.target.value)} placeholder="qwen2.5:7b" className="min-w-0 flex-1 rounded-lg border border-white/10 bg-[#141418] px-2.5 py-1.5 font-mono text-[10px] text-gray-300 outline-none focus:border-brand-cyan/50" />
+            <button type="button" onClick={() => void handleSaveOllamaModel()} className="rounded-lg border border-brand-cyan/30 px-3 py-1.5 text-[9px] font-bold uppercase tracking-wider text-brand-cyan">Guardar</button>
+          </div>
+          <p className="text-[9px] leading-relaxed text-gray-600">Ollama debe estar instalado y escuchando en 127.0.0.1:11434. El modelo debe estar descargado.</p>
+        </div>
+
         <label className="mb-1 block text-[9px] font-mono uppercase tracking-widest text-gray-600" htmlFor="ai-model">
-          Modelo
+          Modelo Gemini
         </label>
         <input
           id="ai-model"

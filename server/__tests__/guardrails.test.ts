@@ -13,10 +13,20 @@ import {
 } from '../guardrails';
 
 describe('validateAiQuery', () => {
-  it('acepta un prompt normal y recorta espacios', () => {
+  it('acepta un prompt normal y usa modo local por defecto', () => {
     const result = validateAiQuery({ prompt: '  hola  ' });
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.prompt).toBe('hola');
+    if (result.ok) {
+      expect(result.value.prompt).toBe('hola');
+      expect(result.value.mode).toBe('local');
+    }
+  });
+
+  it('admite solo modos local, cloud o hybrid', () => {
+    expect(validateAiQuery({ prompt: 'x', mode: 'local' }).ok).toBe(true);
+    expect(validateAiQuery({ prompt: 'x', mode: 'cloud' }).ok).toBe(true);
+    expect(validateAiQuery({ prompt: 'x', mode: 'hybrid' }).ok).toBe(true);
+    expect(validateAiQuery({ prompt: 'x', mode: 'automatic' }).ok).toBe(false);
   });
 
   it('rechaza cuerpos que no son objetos', () => {
@@ -46,7 +56,17 @@ describe('validateTranslate', () => {
   it('acepta una petición válida y normaliza el idioma', () => {
     const result = validateTranslate({ url: 'https://example.com', targetLanguage: 'English' });
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value.targetLanguage).toBe('English');
+    if (result.ok) {
+      expect(result.value.targetLanguage).toBe('English');
+      expect(result.value.mode).toBe('local');
+    }
+  });
+
+  it('usa modo local por defecto y valida modos explícitos', () => {
+    const local = validateTranslate({ url: 'https://a.test', targetLanguage: 'Español' });
+    expect(local.ok && local.value.mode).toBe('local');
+    expect(validateTranslate({ url: 'https://a.test', targetLanguage: 'Español', mode: 'hybrid' }).ok).toBe(true);
+    expect(validateTranslate({ url: 'https://a.test', targetLanguage: 'Español', mode: 'automatic' }).ok).toBe(false);
   });
 
   it('exige url', () => {
