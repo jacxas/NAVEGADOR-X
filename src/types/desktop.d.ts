@@ -95,10 +95,12 @@ export interface NavegadorXBridge {
   ai: {
     hasKey: () => Promise<boolean>;
     model: () => Promise<string>;
+    mode: () => Promise<'local' | 'cloud' | 'hybrid'>;
+    setMode: (mode: 'local' | 'cloud' | 'hybrid') => Promise<{ ok: boolean; mode: 'local' | 'cloud' | 'hybrid'; reason?: string }>;
     setKey: (credencial: string, model?: string) => Promise<{ hasKey: boolean; model: string }>;
     query: (
       prompt: string,
-      options?: { systemInstruction?: string; temperature?: number },
+      options?: { systemInstruction?: string; temperature?: number; mode?: 'local' | 'cloud' | 'hybrid' },
     ) => Promise<NativeAiResult>;
     translate: (url: string, targetLanguage: string, pageContent?: string) => Promise<NativeAiTranslation>;
   };
