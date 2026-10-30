@@ -104,7 +104,7 @@ export interface NavegadorXBridge {
       prompt: string,
       options?: { systemInstruction?: string; temperature?: number; mode?: 'local' | 'cloud' | 'hybrid' },
     ) => Promise<NativeAiResult>;
-    translate: (url: string, targetLanguage: string, pageContent?: string) => Promise<NativeAiTranslation>;
+    translate: (url: string, targetLanguage: string, pageContent?: string, mode?: 'local' | 'cloud' | 'hybrid') => Promise<NativeAiTranslation>;
   };
   downloads: {
     list: () => Promise<NativeDownloadRecord[]>;
