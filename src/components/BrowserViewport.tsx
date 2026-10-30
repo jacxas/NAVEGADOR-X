@@ -300,8 +300,12 @@ export const BrowserViewport = forwardRef<BrowserViewportHandle, BrowserViewport
   useEffect(() => {
     const view = webviewRef.current;
     if (!view) return;
-    // Antes de `dom-ready` no se puede consultar la URL: basta con asignar `src`.
-    const current = domReadyRef.current ? safeCall(() => view.getURL(), '') : '';
+    // El efecto de montaje ya asigna el src inicial antes de insertar el webview.
+    // Antes de dom-ready getURL() aún no es fiable: comparamos el atributo solicitado
+    // para no volver a navegar a la misma URL y reiniciar la carga inicial.
+    const current = domReadyRef.current
+      ? safeCall(() => view.getURL(), '')
+      : safeCall(() => view.getAttribute('src') || view.src, '');
     if (current === url) return;
     view.src = url;
   }, [url]);
