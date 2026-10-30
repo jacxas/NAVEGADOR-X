@@ -1079,18 +1079,40 @@ function registerIpcHandlers(): void {
       return callGemini(prompt, { systemInstruction, temperature: options?.temperature });
     },
   );
-  ipcMain.handle('ai:translate', async (_event, url: string, targetLanguage: string, pageContent?: string) => {
+  ipcMain.handle('ai:translate', async (
+    _event,
+    url: string,
+    targetLanguage: string,
+    pageContent?: string,
+    requestedMode?: AiMode,
+  ) => {
+    if (typeof pageContent !== 'string' || !pageContent.trim()) {
+      throw new Error('No se recibió el contenido de la página. No se puede traducir solo a partir de una URL.');
+    }
     const prompt =
-      `Eres el traductor instantáneo inteligente integrado en el navegador 'Navegador X'.\n\n` +
-      `Traducción requerida:\n- URL del sitio web: ${url || 'Pestaña Activa de Navegador X'}\n` +
-      `- Idioma de destino: ${targetLanguage}\n` +
-      `${pageContent ? `- Contenido extraído del sitio:\n${pageContent}` : ''}\n\n` +
-      `Responde en Markdown con:\n1. **Resumen de la Página**\n2. **Titular Traducido**\n` +
-      `3. **Contenido Principal Traducido**\n4. **Highlights / Menú de Navegación Traducido**`;
+      `Traduce fielmente el siguiente contenido al idioma "${targetLanguage}".\\n` +
+      `No inventes información ni agregues contenido que no aparezca en el original.\\n` +
+      `URL de origen: ${url || 'Pestaña activa'}\\n\\nCONTENIDO:\\n${pageContent}`;
+    const systemInstruction = 'Eres un traductor profesional. Conserva el significado, formato y nombres propios.';
+    const mode = requestedMode || configuredAiMode();
 
-    const result = await callGemini(prompt, { temperature: 0.3 });
+    let result: AiResult;
+    if (mode === 'local' || mode === 'hybrid') {
+      try {
+        result = await callOllamaDesktop(prompt, { systemInstruction, temperature: 0.3 });
+      } catch (error) {
+        if (mode === 'local') {
+          throw new Error('Ollama no está disponible. No se envió el contenido a la nube.');
+        }
+        console.warn('[NavegadorX] Ollama translation unavailable; explicit hybrid fallback.', error);
+        result = await callGemini(prompt, { systemInstruction, temperature: 0.3 });
+      }
+    } else {
+      result = await callGemini(prompt, { systemInstruction, temperature: 0.3 });
+    }
+
     return {
-      success: !result.offline,
+      success: true,
       translatedContent: result.response,
       provider: result.provider,
       targetLanguage,
