@@ -353,8 +353,16 @@ export default function App() {
    */
   const handleInstantTranslate = async (overrideLang?: string) => {
     const langToUse = overrideLang || targetLang;
+    const activeUrl = isBrowsing ? browsingUrl : url;
+    const isDesktopWebPage = isDesktopApp() && /^https?:/i.test(activeUrl);
 
-    if (isDesktopApp() && isBrowsing) {
+    // En Electron, una URL web siempre se traduce en el DOM del webview.
+    // No dependemos de `isBrowsing`: puede quedar desincronizado al navegar
+    // mediante enlaces internos de la propia página.
+    if (isDesktopWebPage) {
+      setShowTranslationModal(false);
+      setTranslationData(null);
+      setTranslationError(null);
       setPageTranslation({ phase: 'translating', done: 0, total: 0, language: langToUse });
       kernel.eventBus.publish(
         'viewport.command',
@@ -368,7 +376,6 @@ export default function App() {
     setTranslationError(null);
     setShowTranslationModal(true);
 
-    const activeUrl = isBrowsing ? browsingUrl : url;
     
     try {
       // La clave de Gemini nunca vive en el renderer: el cliente decide entre el
