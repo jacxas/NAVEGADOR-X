@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import { db } from "./db.ts";
 import { GEMINI_MODEL, getGeminiClient, isGeminiConfigured } from "./server/gemini.ts";
 import { getVPNGateServers } from "./server/vpn-gate.ts";
+import { callOllama, ollamaHealth } from "./server/ollama.ts";
 import {
   createRateLimiter,
   isSafeId,
@@ -138,42 +139,65 @@ async function startServer() {
     }
   });
 
-  // AI Query via Gemini Server Proxy
+  // AI Query: local-first by default. Cloud use requires an explicit mode.
   app.post("/api/v1/ai/query", aiLimiter, async (req, res) => {
     const parsed = validateAiQuery(req.body);
     if (parsed.ok === false) return res.status(400).json({ error: parsed.error });
 
-    const { prompt, systemInstruction } = parsed.value;
+    const { prompt, systemInstruction, mode } = parsed.value;
+    const instructions = systemInstruction ||
+      "Eres la IA contextual e integrada de Navegador X. Responde de forma concisa y profesional.";
 
-    try {
+    if (mode === 'local' || mode === 'hybrid') {
+      try {
+        const result = await callOllama(prompt, { systemInstruction: instructions });
+        return res.json({ ...result, mode: 'local' });
+      } catch (error) {
+        console.warn("[NavegadorX] Ollama local no disponible:", error instanceof Error ? error.message : String(error));
+        if (mode === 'local') {
+          return res.status(503).json({
+            error: "Ollama no está disponible o el modelo local no está instalado. No se enviaron datos a la nube.",
+            code: "OLLAMA_UNAVAILABLE",
+            mode: 'local',
+          });
+        }
+      }
+    }
+
+    if (mode === 'cloud' || mode === 'hybrid') {
       const ai = getGeminiClient();
-
       if (!ai) {
-        return res.json({
-          response: `[Modo Offline/Sin API Key] Respuesta simulada a: "${prompt.slice(0, 500)}". Para habilitar Gemini real en el servidor, configure GEMINI_API_KEY en las variables de entorno.`,
-          provider: "Local Offline Engine"
+        return res.status(503).json({
+          error: mode === 'hybrid'
+            ? "Ollama no está disponible y Gemini no está configurado. No se generó respuesta."
+            : "Gemini no está configurado en el servidor.",
+          code: "GEMINI_NOT_CONFIGURED",
+          mode,
         });
       }
-
-      const response = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: prompt,
-        config: {
-          systemInstruction: systemInstruction || "Eres la IA contextual e integrada del microkernel 'X Runtime OS' / 'Navegador X'. Responde de forma concisa y profesional.",
-          temperature: 0.7,
-        }
-      });
-
-      res.json({
-        response: response.text || "No se obtuvo respuesta del motor IA.",
-        provider: "Gemini 3.6 Flash"
-      });
-    } catch (error) {
-      // El detalle se queda en el registro del servidor: puede incluir la URL
-      // interna del proveedor o partes de la petición.
-      console.error("Error en /api/v1/ai/query:", error);
-      res.status(502).json({ error: "El proveedor de IA no respondió correctamente." });
+      try {
+        const response = await ai.models.generateContent({
+          model: GEMINI_MODEL,
+          contents: prompt,
+          config: { systemInstruction: instructions, temperature: 0.7 },
+        });
+        return res.json({
+          response: response.text || "No se obtuvo respuesta del motor IA.",
+          provider: "Gemini",
+          offline: false,
+          mode: 'cloud',
+          fallbackUsed: mode === 'hybrid',
+        });
+      } catch (error) {
+        console.error("Error en /api/v1/ai/query:", error);
+        return res.status(502).json({ error: "El proveedor Gemini no respondió correctamente.", code: "GEMINI_REQUEST_FAILED" });
+      }
     }
+  });
+
+  app.get("/api/v1/ai/local-status", async (_req, res) => {
+    const status = await ollamaHealth();
+    res.json(status);
   });
 
   // AI Instant Translate via Gemini
