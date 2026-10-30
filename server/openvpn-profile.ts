@@ -60,14 +60,14 @@ function validIPv4(host: string): boolean {
 function validateDirective(name: string, args: string[]): void {
   if (!ALLOWED_DIRECTIVES.has(name)) throw new Error(`OpenVPN directive rejected: ${name}`);
   if (name === 'dev' && (args.length !== 1 || args[0] !== 'tun')) throw new Error('Only dev tun is permitted.');
-  if (name === 'proto' && (args.length !== 1 || !['udp', 'tcp-client'].includes(args[0]))) {
+  if (name === 'proto' && (args.length !== 1 || !['udp', 'tcp', 'tcp-client'].includes(args[0]))) {
     throw new Error('Only UDP or TCP client transport is permitted.');
   }
   if (name === 'remote') {
     if (args.length < 2 || args.length > 3 || !validIPv4(args[0])) throw new Error('Remote must be a literal IPv4 address and port.');
     const port = Number(args[1]);
     if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('Remote port is invalid.');
-    if (args[2] && args[2] !== 'udp' && args[2] !== 'tcp-client') throw new Error('Remote protocol is invalid.');
+    if (args[2] && args[2] !== 'udp' && args[2] !== 'tcp' && args[2] !== 'tcp-client') throw new Error('Remote protocol is invalid.');
   }
   if (name === 'redirect-gateway' && args.some((arg) => !['def1', 'bypass-dhcp', 'bypass-dns', 'ipv6'].includes(arg))) {
     throw new Error('Unsupported redirect-gateway option.');
@@ -166,11 +166,11 @@ export function validateOpenVPNProfile(source: string): ValidatedOpenVPNProfile 
     if (name === 'dev') hasTun = true;
     if (name === 'proto') {
       hasProto = true;
-      selectedProtocol = args[0] as 'udp' | 'tcp-client';
+      selectedProtocol = args[0] === 'tcp' ? 'tcp-client' : args[0] as 'udp' | 'tcp-client';
       if (remote) remote = { ...remote, protocol: selectedProtocol };
     }
     if (name === 'remote') {
-      remote = { host: args[0], port: Number(args[1]), protocol: (args[2] as 'udp' | 'tcp-client' | undefined) || selectedProtocol };
+      remote = { host: args[0], port: Number(args[1]), protocol: (args[2] === 'tcp' ? 'tcp-client' : args[2] as 'udp' | 'tcp-client' | undefined) || selectedProtocol };
     }
   }
 
