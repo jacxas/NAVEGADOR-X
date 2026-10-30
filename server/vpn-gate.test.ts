@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   clearVPNGateCache,
   getVPNGateServers,
+  getVPNGateOpenVPNProfile,
   parseVPNGateCsv,
   VPN_GATE_CSV_URL,
 } from './vpn-gate';
@@ -54,6 +55,42 @@ describe('VPN Gate catalogue parser', () => {
     expect(second.cached).toBe(true);
     expect(second.servers).toEqual(first.servers);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('decodes and validates a selected relay profile without exposing unsafe directives', async () => {
+    const profile = [
+      'client',
+      'dev tun',
+      'proto udp',
+      'remote 1.2.3.4 1194',
+      'resolv-retry infinite',
+      'nobind',
+      'persist-key',
+      'persist-tun',
+      'remote-cert-tls server',
+      'verb 3',
+      '<ca>',
+      '-----BEGIN CERTIFICATE-----',
+      'QUJDREVGRw==',
+      '-----END CERTIFICATE-----',
+      '</ca>',
+    ].join('\\n');
+    const encoded = Buffer.from(profile, 'utf8').toString('base64');
+    const csv = [
+      '*VPN Gate Public VPN Relay Servers List',
+      'HostName,IP,OpenVPN_ConfigData_Base64',
+      `relay.example,1.2.3.4,${encoded}`,
+    ].join('\\n');
+    const fetchImpl = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => String(csv.length) },
+      text: async () => csv,
+    }) as unknown as Response) as unknown as typeof fetch;
+
+    const validated = await getVPNGateOpenVPNProfile('1.2.3.4', { fetchImpl });
+    expect(validated.remote).toEqual({ host: '1.2.3.4', port: 1194, protocol: 'udp' });
+    expect(validated.text).toContain('<ca>');
   });
 
   it('does not cache an unsuccessful upstream response', async () => {
