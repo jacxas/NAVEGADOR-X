@@ -61,3 +61,27 @@ write validated profiles only to an application-owned directory.
 
 These capabilities require a separately reviewed native adapter and Windows
 integration tests. The browser proxy feature is not a VPN tunnel.
+
+
+## Profile validation added
+
+The trusted runtime can now retrieve the selected relay's encoded profile from
+the official feed, decode it and pass it through `server/openvpn-profile.ts`.
+The validator:
+
+- Requires a client TUN profile, a literal IPv4 remote endpoint, a transport
+  protocol and an inline CA certificate.
+- Accepts only a reviewed directive allowlist and rejects unknown directives.
+- Rejects script hooks, plugins, config includes, management endpoints and
+  profile-controlled executable paths.
+- Rejects multiple remote endpoints, unsafe DNS/route syntax and unsupported
+  IPv6 route directives.
+- Enforces a 1 MiB profile size limit.
+
+The validated profile contains private key material and must remain inside the
+trusted main process. It is not returned by the public catalogue endpoint and
+must never be sent to the renderer or written to a world-readable location.
+
+This is still **profile validation only**. The native OpenVPN process adapter,
+Windows elevation/service integration, tunnel-state verification, route/DNS
+verification and disconnect cleanup are not yet implemented.
